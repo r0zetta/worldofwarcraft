@@ -13,6 +13,7 @@ import io
 import os
 import json
 import time
+import sys
 
 punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
 
@@ -292,7 +293,11 @@ def train_model(args):
             if saved_batch_pointer != bp:
                 sys.exit(0)
             else:
-                batch_pointer = bp
+                if bp < num_batches:
+                    print("Batch pointer was larger than number of batches. Starting at zero.")
+                    batch_pointer = 0
+                else:
+                    batch_pointer = bp
             ep = model.epoch_pointer.eval()
             print("Model epoch pointer: " + str(ep))
             print("Saved epoch pointer: " + str(saved_epoch_pointer))
@@ -315,10 +320,9 @@ def train_model(args):
                     train_writer.add_summary(summary, e * num_batches + b)
                     speed = time.time() - start
                     if (e * num_batches + b) % args.output_every == 0:
-                        print("{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
-                            .format(e * num_batches + b,
-                                    args.num_epochs * num_batches,
-                                    e, train_loss, speed))
+                        current_batch = (e + 1) * b
+                        total_batches = args.num_epochs * num_batches
+                        print(str(current_batch) + "/" + str(total_batches) + " (epoch:" + str(e) + "), (train_loss:" + str("%.3f"%train_loss) + ") (speed:" + str("%.3f"%speed) + ")")
                     if (e * num_batches + b) % args.save_every == 0 \
                             or (e==args.num_epochs-1 and b == num_batches-1):
                         checkpoint_path = os.path.join(save_dir, 'model.ckpt')
@@ -352,7 +356,7 @@ def get_args():
                        help='minibatch size')
     parser.add_argument('--seq_length', type=int, default=25,
                        help='RNN sequence length')
-    parser.add_argument('--num_epochs', type=int, default=500,
+    parser.add_argument('--num_epochs', type=int, default=1000,
                        help='number of epochs')
     parser.add_argument('--output_every', type=int, default=10,
                        help='screen output frequency')
