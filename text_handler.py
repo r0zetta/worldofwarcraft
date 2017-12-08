@@ -160,7 +160,7 @@ def load_input_from_file(input_file):
 
 def load_and_tokenize(input_file, split_mode):
     print("Loading data from " + input_file)
-    raw_data = load_input_from_file()
+    raw_data = load_input_from_file(input_file)
     if raw_data is None:
         assert False, "Failed to load input data"
     tokens = []

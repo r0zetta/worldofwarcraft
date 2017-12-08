@@ -2,23 +2,43 @@ from bs4 import BeautifulSoup
 import os
 import io
 import re
-import urllib2
+import requests
 import sys
 import json
+import time
 
 # URLs for the General and Class Development US forums on battle.net
 start_urls = ["https://us.battle.net/forums/en/wow/22814068/", "https://us.battle.net/forums/en/wow/984270/"]
 num_pages_to_visit = 10
 visited_urls = []
 
+# Attempt to fetch URL, handling timeout, and retrying
+def fetch_url(url):
+    while True:
+        try:
+            r = requests.get(url, timeout=30)
+            r.raise_for_status()
+            return r
+        except requests.exceptions.HTTPError as eh:
+            print ("HTTP Error: ", eh)
+        except requests.exceptions.ConnectionError as ec:
+            print ("Connection Error: ", ec)
+        except requests.exceptions.Timeout as et:
+            print ("Timeout: ", et)
+        except requests.exceptions.RequestException as ef:
+            print ("Fatal Error: ", ef)
+            break
+        print("Retrying in 10 seconds.")
+        time.sleep(10)
+
 # This function loads a URL and throws it into BeautifulSoup for parsing
 # This function returns a BeautifulSoup object
 def get_page_source(url):
     global visited_urls
-    page = urllib2.urlopen(url)
+    page = fetch_url(url)
     if url not in visited_urls:
         visited_urls.append(url)
-    html_code = page.read()
+    html_code = page.content
     soup = BeautifulSoup(html_code, "lxml")
     return soup
 

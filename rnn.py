@@ -16,7 +16,7 @@ import time
 
 punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
 
-save_dir = "save"
+save_dir = "rnn_save"
 data_dir = "data"
 log_dir = "logs"
 split_mode = "words"
@@ -247,7 +247,7 @@ def save_trainer_state(epochs, batch_position):
 
 def load_trainer_state():
     variable = []
-    with open(train_state_file, "w") as f:
+    with open(train_state_file, "r") as f:
         variable = json.load(f)
     return variable
 
@@ -255,8 +255,6 @@ def train_model(args):
     global batch_pointer
     print("Training...")
     saved_state = check_for_saved_state()
-    starting_epoch = 0
-    starting_batch_pointer = 0
     vocab = None
     vocab_inv = None
     tensors = None
@@ -271,15 +269,15 @@ def train_model(args):
     x_batches, y_batches = create_batches(tensors, args.batch_size, args.seq_length)
     restore_checkpoint = False
     ckpt = tf.train.get_checkpoint_state(save_dir)
-    if ckpt.model_checkpoint_path is not None:
+    if ckpt is not None:
         print("Tensorflow restore point found.")
         restore_checkpoint = True
     if os.path.exists(train_state_file):
-        starting_epoch, starting_batch_pointer = load_saved_state()
-    batch_pointer = starting_batch_pointer
+        saved_epoch_pointer, saved_batch_pointer = load_trainer_state()
     model = Model(args)
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter(log_dir)
+    starting_epoch = 0
     print("Starting session.")
     with tf.Session() as sess:
         train_writer.add_graph(sess.graph)
@@ -288,10 +286,25 @@ def train_model(args):
         if restore_checkpoint == True:
             print("Restoring checkpoint")
             saver.restore(sess, ckpt.model_checkpoint_path)
+            bp = model.batch_pointer.eval()
+            print("Saved batch pointer: " + str(saved_batch_pointer))
+            print("Model batch pointer: " + str(bp))
+            if saved_batch_pointer != bp:
+                sys.exit(0)
+            else:
+                batch_pointer = bp
+            ep = model.epoch_pointer.eval()
+            print("Model epoch pointer: " + str(ep))
+            print("Saved epoch pointer: " + str(saved_epoch_pointer))
+            if saved_epoch_pointer != ep:
+                sys.exit(0)
+            else:
+                starting_epoch = ep
         try:
             for e in range(starting_epoch, args.num_epochs):
                 sess.run(tf.assign(model.lr, args.learning_rate * (args.decay_rate ** e)))
                 state = sess.run(model.initial_state)
+                batch_pointer = 0
                 speed = 0
                 for b in range(batch_pointer, num_batches):
                     start = time.time()
