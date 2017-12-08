@@ -25,6 +25,7 @@ vocab_file = os.path.join(save_dir, "vocab.pkl")
 vocab_json = os.path.join(save_dir, "vocab.json")
 tensor_file = os.path.join(save_dir, "tensors.npy")
 checkpoint_file = os.path.join(save_dir, "checkpoint")
+train_state_file = os.path.join(save_dir, "train_state.json")
 batch_pointer = 0
 
 class Model():
@@ -44,8 +45,6 @@ class Model():
             cell_fn = rnn.GRUCell
         elif args.model == 'lstm':
             cell_fn = rnn.BasicLSTMCell
-        else:
-            raise Exception("model type not supported: {}".format(args.model))
 
         cells = []
         print("Layer count: " + str(args.num_layers))
@@ -53,7 +52,6 @@ class Model():
         for _ in range(args.num_layers):
             cell = cell_fn(args.rnn_size)
             cells.append(cell)
-
         self.cell = cell = rnn.MultiRNNCell(cells)
 
         self.input_data = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
@@ -133,10 +131,8 @@ def build_vocab(tokens):
     print("Saving word counts.")
     with open("save/word_counts.json", "w") as file:
         json.dump(dict(element_counts), file, indent=4)
-    # Mapping from index to element
     vocab_inv = [x[0] for x in element_counts.most_common()]
     vocab_inv = list(sorted(vocab_inv))
-    # Mapping from element to index
     vocab = {x: i for i, x in enumerate(vocab_inv)}
     return [vocab, vocab_inv]
 
@@ -179,10 +175,6 @@ def next_batch(x_batches, y_batches):
     batch_pointer += 1
     return x, y
 
-def reset_batch_pointer():
-    global batch_pointer
-    batch_pointer = 0
-
 def generate_text(args):
     print("Sampling...")
     sample_count = args.n
@@ -200,18 +192,18 @@ def generate_text(args):
         ckpt = tf.train.get_checkpoint_state(save_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ret = ""
-            prime = ""
+            next_word = ""
             print("Restoring saved model.")
             saver.restore(sess, ckpt.model_checkpoint_path)
             found = False
             while found != True:
-                prime = random.choice(list(vocab.keys()))
-                if prime[0].isupper():
+                next_word = random.choice(list(vocab.keys()))
+                if next_word[0].isupper():
                     found = True
-            print("Randomly chosen prime: " + prime)
+            print("Randomly chosen starting word: " + next_word)
             state = sess.run(model.cell.zero_state(1, tf.float32))
-            ret = prime
-            word = prime.split()[-1]
+            ret = next_word
+            word = next_word.split()[-1]
             word_count = 0
             sentence_count = 0
             new_sentence = False
@@ -248,10 +240,23 @@ def generate_text(args):
                         finished = True
             print(ret)
 
+def save_trainer_state(epochs, batch_position):
+    variable = [epochs, batch_position]
+    with open(train_state_file, "w") as f:
+        json.dump(variable, f)
+
+def load_trainer_state():
+    variable = []
+    with open(train_state_file, "w") as f:
+        variable = json.load(f)
+    return variable
+
 def train_model(args):
     global batch_pointer
     print("Training...")
     saved_state = check_for_saved_state()
+    starting_epoch = 0
+    starting_batch_pointer = 0
     vocab = None
     vocab_inv = None
     tensors = None
@@ -264,12 +269,14 @@ def train_model(args):
     args.vocab_size = len(vocab_inv)
     num_batches = int(tensors.size / (args.batch_size * args.seq_length))
     x_batches, y_batches = create_batches(tensors, args.batch_size, args.seq_length)
-    reset_batch_pointer()
     restore_checkpoint = False
     ckpt = tf.train.get_checkpoint_state(save_dir)
     if ckpt.model_checkpoint_path is not None:
         print("Tensorflow restore point found.")
         restore_checkpoint = True
+    if os.path.exists(train_state_file):
+        starting_epoch, starting_batch_pointer = load_saved_state()
+    batch_pointer = starting_batch_pointer
     model = Model(args)
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter(log_dir)
@@ -282,16 +289,10 @@ def train_model(args):
             print("Restoring checkpoint")
             saver.restore(sess, ckpt.model_checkpoint_path)
         try:
-            for e in range(model.epoch_pointer.eval(), args.num_epochs):
+            for e in range(starting_epoch, args.num_epochs):
                 sess.run(tf.assign(model.lr, args.learning_rate * (args.decay_rate ** e)))
-                reset_batch_pointer()
                 state = sess.run(model.initial_state)
                 speed = 0
-                #if restore_checkpoint == True:
-                    #assign_op = model.epoch_pointer.assign(e)
-                    #sess.run(assign_op)
-                    #batch_pointer = model.batch_pointer.eval()
-                    #restore_checkpoint = False
                 for b in range(batch_pointer, num_batches):
                     start = time.time()
                     x, y = next_batch(x_batches, y_batches)
@@ -309,12 +310,14 @@ def train_model(args):
                             or (e==args.num_epochs-1 and b == num_batches-1):
                         checkpoint_path = os.path.join(save_dir, 'model.ckpt')
                         saver.save(sess, checkpoint_path, global_step = e * num_batches + b)
+                        save_trainer_state(e, batch_pointer)
                         print("model saved to {}".format(checkpoint_path))
         except KeyboardInterrupt:
             print("Keyboard interrupt.")
             print("Saving. Please wait.")
             checkpoint_path = os.path.join(save_dir, 'model.ckpt')
             saver.save(sess, checkpoint_path, global_step = e * num_batches + b)
+            save_trainer_state(e, batch_pointer)
             print("model saved to {}".format(checkpoint_path))
         train_writer.close()
 
@@ -338,9 +341,9 @@ def get_args():
                        help='RNN sequence length')
     parser.add_argument('--num_epochs', type=int, default=500,
                        help='number of epochs')
-    parser.add_argument('--output_every', type=int, default=5,
+    parser.add_argument('--output_every', type=int, default=10,
                        help='screen output frequency')
-    parser.add_argument('--save_every', type=int, default=50,
+    parser.add_argument('--save_every', type=int, default=500,
                        help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=5.,
                        help='clip gradients at this value')
