@@ -147,34 +147,31 @@ if __name__ == '__main__':
             print("Got: " + str(len(thread_urls)) + " thread URLs.")
             thread_count = 1
             for u in thread_urls:
-                if u in visited_urls:
-                    print("URL: " + u + " has already been scraped. Skipping.")
-                else:
-                    next_button = ""
-                    sub_pages = 0
-                    post_count = 0
-                    print("[" + str(thread_count) + "]: " + u)
-                    thread_count += 1
-                    while next_button is not None:
-                        next_url = u + next_button
-                        print("Getting posts for url: " + next_url)
-                        current_posts, next_button = process_forum_topic(next_url)
-                        if current_posts is not None:
-                            for c in current_posts:
-                                if c not in posts:
-                                    post_count += 1
-                                    posts.append(c)
-                                else:
-                                    print("Post already seen. Skipping")
-                        print("New posts collected so far in this thread: " + str(post_count))
-                        if next_button is not None:
-                            sub_pages += 1
-                    print("For URL: " + u)
-                    print("Sub pages: " + str(sub_pages))
-                    print("Posts: " + str(post_count))
-                    dump_data(posts)
-                    dump_visited()
-                    dump_raw(posts)
+                next_button = ""
+                sub_pages = 0
+                post_count = 0
+                print("[" + str(thread_count) + "]: " + u)
+                thread_count += 1
+                while next_button is not None:
+                    next_url = u + next_button
+                    print("Getting posts for url: " + next_url)
+                    current_posts, next_button = process_forum_topic(next_url)
+                    if current_posts is not None:
+                        for c in current_posts:
+                            if c not in posts:
+                                post_count += 1
+                                posts.append(c)
+                            else:
+                                print("Post already seen. Skipping")
+                    print("New posts collected so far in this thread: " + str(post_count))
+                    if next_button is not None:
+                        sub_pages += 1
+                print("For URL: " + u)
+                print("Sub pages: " + str(sub_pages))
+                print("Posts: " + str(post_count))
+                dump_data(posts)
+                dump_visited()
+                dump_raw(posts)
     print("Done collecting")
 
 
