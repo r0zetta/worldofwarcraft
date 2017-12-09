@@ -136,9 +136,9 @@ def build_vocab(tokens):
     vocab = {x: i for i, x in enumerate(vocab_inv)}
     return [vocab, vocab_inv]
 
-def process_input_data(input_file, args.split):
+def process_input_data(input_file, tokenize):
     print("Processing input data")
-    tokens = load_and_tokenize(input_file, args.split)
+    tokens = load_and_tokenize(input_file, tokenize)
     vocab, vocab_inv = build_vocab(tokens)
     vocab_size = len(vocab_inv)
     print("Vocab size: " + str(vocab_size))
@@ -216,6 +216,7 @@ def generate_text(args):
                 s = np.sum(weights)
                 return(int(np.searchsorted(t, np.random.rand(1)*s)))
 
+            sentence_length = 0
             while finished == False:
                 x = np.zeros((1, 1))
                 x[0, 0] = vocab.get(word, 0)
@@ -224,6 +225,7 @@ def generate_text(args):
                 p = probs[0]
                 sample = weighted_pick(p)
                 pred = vocab_inv[sample]
+                sentence_length += 1
                 if pred in punct:
                     ret += pred
                 else:
@@ -233,8 +235,9 @@ def generate_text(args):
                     else:
                         ret += ' ' + pred
                 word = pred
-                if pred == "." or pred == "?" or pred == "!":
+                if pred == "." or pred == "?" or pred == "!" or sentence_length > 200:
                     sentence_count += 1
+                    sentence_length = 0
                     new_sentence = True
                     print("Generated " + str(sentence_count) + " sentences.")
                     ret += "\n"
@@ -265,7 +268,7 @@ def train_model(args):
         vocab, vocab_inv, tensors = load_saved_state()
     else:
         print("No previously saved data exists. Starting from scratch.")
-        vocab, vocab_inv, tensors = process_input_data(input_file, args.split)
+        vocab, vocab_inv, tensors = process_input_data(input_file, args.tokenize)
     args.vocab_size = len(vocab_inv)
     num_batches = int(tensors.size / (args.batch_size * args.seq_length))
     x_batches, y_batches = create_batches(tensors, args.batch_size, args.seq_length)
@@ -344,8 +347,8 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='train',
                        help='train or sample')
-    parser.add_argument('--split', type=str, default='words',
-                       help='split by words or chars')
+    parser.add_argument('--tokenize', type=str, default='words',
+                       help='tokenize by words or chars')
     parser.add_argument('-n', type=int, default=25,
                        help='The number of sentences to generate')
     parser.add_argument('--rnn_size', type=int, default=300,
@@ -375,8 +378,6 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    save_dir = "rnn_save_" + args.split
-    log_dir = "rnn_logs_" + args.split
     if not os.path.exists(save_dir):
         print("Creating save directory: " + save_dir)
         os.makedirs(save_dir)
