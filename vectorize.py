@@ -45,14 +45,10 @@ if __name__ == '__main__':
     downsampling = 1e-3
     seed = 1
     epoch_count = 1000
-    split_into_sentences = False
 
     raw_data = load_data(input_file)
-    if split_into_sentences == True:
-        raw_sentences = split_into_sentences(raw_data)
-        sentences = tokenize_sentences(raw_sentences)
-    else:
-        sentences = tokenize_sentences(raw_data)
+    raw_sentences = split_into_sentences(raw_data)
+    sentences = tokenize_sentences(raw_sentences)
 
     sentence_count = len(sentences)
     print("Number of sentences: " + str(sentence_count))
