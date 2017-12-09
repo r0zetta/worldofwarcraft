@@ -20,7 +20,6 @@ punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/",
 save_dir = "rnn_save"
 data_dir = "data"
 log_dir = "logs"
-split_mode = "words"
 input_file = os.path.join(data_dir, "data.json")
 vocab_file = os.path.join(save_dir, "vocab.pkl")
 vocab_json = os.path.join(save_dir, "vocab.json")
@@ -130,16 +129,16 @@ def build_vocab(tokens):
     print("Building vocab")
     element_counts = collections.Counter(tokens)
     print("Saving word counts.")
-    with open("save/word_counts.json", "w") as file:
+    with open("rnn_save/word_counts.json", "w") as file:
         json.dump(dict(element_counts), file, indent=4)
     vocab_inv = [x[0] for x in element_counts.most_common()]
     vocab_inv = list(sorted(vocab_inv))
     vocab = {x: i for i, x in enumerate(vocab_inv)}
     return [vocab, vocab_inv]
 
-def process_input_data(input_file, split_mode):
+def process_input_data(input_file, args.split):
     print("Processing input data")
-    tokens = load_and_tokenize(input_file, split_mode)
+    tokens = load_and_tokenize(input_file, args.split)
     vocab, vocab_inv = build_vocab(tokens)
     vocab_size = len(vocab_inv)
     print("Vocab size: " + str(vocab_size))
@@ -196,12 +195,14 @@ def generate_text(args):
             next_word = ""
             print("Restoring saved model.")
             saver.restore(sess, ckpt.model_checkpoint_path)
+            ep = model.epoch_pointer.eval()
+            print("Model was trained for " + str(ep) + " epochs.")
             found = False
             while found != True:
                 next_word = random.choice(list(vocab.keys()))
                 if next_word[0].isupper():
                     found = True
-            print("Randomly chosen starting word: " + next_word)
+            print("Randomly chosen starting token: " + next_word)
             state = sess.run(model.cell.zero_state(1, tf.float32))
             ret = next_word
             word = next_word.split()[-1]
@@ -264,7 +265,7 @@ def train_model(args):
         vocab, vocab_inv, tensors = load_saved_state()
     else:
         print("No previously saved data exists. Starting from scratch.")
-        vocab, vocab_inv, tensors = process_input_data(input_file, split_mode)
+        vocab, vocab_inv, tensors = process_input_data(input_file, args.split)
     args.vocab_size = len(vocab_inv)
     num_batches = int(tensors.size / (args.batch_size * args.seq_length))
     x_batches, y_batches = create_batches(tensors, args.batch_size, args.seq_length)
@@ -320,15 +321,14 @@ def train_model(args):
                     train_writer.add_summary(summary, e * num_batches + b)
                     speed = time.time() - start
                     if (e * num_batches + b) % args.output_every == 0:
-                        current_batch = (e + 1) * b
-                        total_batches = args.num_epochs * num_batches
-                        print(str(current_batch) + "/" + str(total_batches) + " (epoch:" + str(e) + "), (train_loss:" + str("%.3f"%train_loss) + ") (speed:" + str("%.3f"%speed) + ")")
+                        print(str(b) + "/" + str(num_batches) + " (epoch:" + str(e) + "/" + str(args.num_epochs) + "), (train_loss:" + str("%.3f"%train_loss) + ") (speed:" + str("%.3f"%speed) + ")")
                     if (e * num_batches + b) % args.save_every == 0 \
                             or (e==args.num_epochs-1 and b == num_batches-1):
                         checkpoint_path = os.path.join(save_dir, 'model.ckpt')
+                        print("Saving...")
                         saver.save(sess, checkpoint_path, global_step = e * num_batches + b)
                         save_trainer_state(e, batch_pointer)
-                        print("model saved to {}".format(checkpoint_path))
+                        print("Model saved to " + checkpoint_path)
         except KeyboardInterrupt:
             print("Keyboard interrupt.")
             print("Saving. Please wait.")
@@ -344,9 +344,11 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='train',
                        help='train or sample')
-    parser.add_argument('-n', type=int, default=20,
+    parser.add_argument('--split', type=str, default='words',
+                       help='split by words or chars')
+    parser.add_argument('-n', type=int, default=25,
                        help='The number of sentences to generate')
-    parser.add_argument('--rnn_size', type=int, default=256,
+    parser.add_argument('--rnn_size', type=int, default=300,
                        help='size of RNN hidden state')
     parser.add_argument('--num_layers', type=int, default=3,
                        help='number of layers in the RNN')
@@ -372,10 +374,12 @@ def get_args():
     return args
 
 if __name__ == '__main__':
+    args = get_args()
+    save_dir = "rnn_save_" + args.split
+    log_dir = "rnn_logs_" + args.split
     if not os.path.exists(save_dir):
         print("Creating save directory: " + save_dir)
         os.makedirs(save_dir)
-    args = get_args()
     if args.mode == "train":
         train_model(args)
     else:
