@@ -44,11 +44,16 @@ if __name__ == '__main__':
     context_size = 7
     downsampling = 1e-3
     seed = 1
-    epoch_count = 100
+    epoch_count = 1000
+    split_into_sentences = False
 
     raw_data = load_data(input_file)
-    raw_sentences = split_into_sentences(raw_data)
-    sentences = tokenize_sentences(raw_sentences)
+    if split_into_sentences == True:
+        raw_sentences = split_into_sentences(raw_data)
+        sentences = tokenize_sentences(raw_sentences)
+    else:
+        sentences = tokenize_sentences(raw_data)
+
     sentence_count = len(sentences)
     print("Number of sentences: " + str(sentence_count))
     token_count = sum([len(sentence) for sentence in sentences])

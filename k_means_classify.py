@@ -1,6 +1,7 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score
+import pickle
 import os
 import nltk
 import json
@@ -35,23 +36,31 @@ def predict(sentence):
 def predict_val(sentence):
     Y = vectorizer.transform([sentence])
     prediction = model.predict(Y)
-    return prediction
+    return int(prediction[0])
 
 if __name__ == '__main__':
-    sentences = []
-    input_file = "data/data.json"
-    json_data = load_data(input_file)
-    raw_data = "\n".join(json_data)
-    documents = split_into_sentences(raw_data)
+    split_into_sentences = False
+    json_data = load_data("data/data.json")
+    documents = []
+    if split_into_sentences == True:
+        documents = split_into_sentences("\n".join(json_data))
+    else:
+        documents = json_data
 
     print("Vectorizing")
     vectorizer = TfidfVectorizer(stop_words='english')
     X = vectorizer.fit_transform(documents)
 
-    print("Clustering")
-    num_k = 200
-    model = KMeans(n_clusters=num_k, init='k-means++', max_iter=200, n_init=1)
-    model.fit(X)
+    num_k = 70
+    model = KMeans(n_clusters=num_k, init='k-means++', max_iter=100, n_init=1, verbose=1)
+    if os.path.exists("save/k_means_model.sav"):
+        print("Loading model from disk.")
+        model = pickle.load(open("save/k_means_model.sav", "rb"))
+    else:
+        print("Clustering")
+        model.fit(X)
+        print("Saving model.")
+        pickle.dump(model, open("save/k_means_model.sav", "wb"))
 
     print("Top terms per cluster:")
     term_labels = {}
@@ -59,9 +68,10 @@ if __name__ == '__main__':
     terms = vectorizer.get_feature_names()
     for i in range(num_k):
         print("Cluster %d:" % i),
+        term_labels[i] = []
         for ind in order_centroids[i, :25]:
+            term_labels[i].append(terms[ind])
             print(' %s' % terms[ind]),
-            term_labels[i] = terms[ind]
         print
     with open("save/term_labels.json", "w") as f:
         json.dump(term_labels, f, indent=4)
@@ -93,5 +103,5 @@ if __name__ == '__main__':
     with open("save/predictions.json", "w") as f:
         json.dump(predictions, f, indent=4)
     with open("save/counts.json", "w") as f:
-        json.dump(predictions, f, indent=4)
+        json.dump(counts, f, indent=4)
 
