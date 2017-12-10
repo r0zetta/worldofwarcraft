@@ -8,10 +8,6 @@ import os
 import nltk
 import json
 
-save_dir = "k_means/"
-num_c = 300
-num_k = 70
-use_dim_reduction = False
 
 def upperfirst(x):
     return x[0].upper() + x[1:]
@@ -42,7 +38,7 @@ def predict_val(sentence, vectorizer, model):
 
 def vectorize(documents):
     print("Vectorizing with tf-idf")
-    vectorizer = TfidfVectorizer(stop_words='english')
+    vectorizer = TfidfVectorizer(stop_words='english', lowercase=False, min_df=10)
     vectors = vectorizer.fit_transform(documents)
     return vectors, vectorizer
 
@@ -129,21 +125,23 @@ def analyze(prefix, data_set, num_k):
     return p, c
 
 def expand_clusters(prefix, counts, predictions, depth):
+    print("Expand clusters called with prefix: " + prefix)
     depth += 1
     for index, value in counts.iteritems():
         if value > 1000:
-            if prefix == "":
-                prefix = str(index) + "_"
-            else:
-                prefix = prefix + "_" + str(index) + "_"
+            new_prefix = prefix + str(index) + "_"
             data_set = predictions[index]
-            p, c = analyze(prefix, data_set, num_k)
-            if depth < 5:
-                expand_clusters(prefix, c, p, depth)
+            p, c = analyze(new_prefix, data_set, num_k)
+            if depth < 3:
+                expand_clusters(new_prefix, c, p, depth)
             else:
                 print("Hit maximum depth")
 
 if __name__ == '__main__':
+    num_c = 300
+    num_k = 30
+    save_dir = "k_means_ " + str(num_k)+ "/"
+    use_dim_reduction = False
     split_into_sentences = False
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
