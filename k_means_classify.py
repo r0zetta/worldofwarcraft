@@ -1,13 +1,17 @@
 from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
 import pickle
 import os
+import io
 import nltk
 import json
+import random
 
+stopwords = ""
 
 def upperfirst(x):
     return x[0].upper() + x[1:]
@@ -36,10 +40,23 @@ def predict_val(sentence, vectorizer, model):
     prediction = model.predict(Y)
     return int(prediction[0])
 
+def get_vocab(documents):
+    print("Getting vocab.")
+    vectorizer = CountVectorizer(lowercase=False)
+    vectorizer.fit(documents)
+    vocab = vectorizer.vocabulary_
+    words = list(vocab.keys())
+    return words
+
 def vectorize(documents):
     print("Vectorizing with tf-idf")
-    vectorizer = TfidfVectorizer(stop_words='english', lowercase=False, min_df=10)
+    if stopwords != "":
+        vectorizer = TfidfVectorizer(stop_words=stop_words, lowercase=False, min_df=5)
+    else:
+        vectorizer = TfidfVectorizer(lowercase=False, min_df=5)
     vectors = vectorizer.fit_transform(documents)
+    vocab = vectorizer.vocabulary_
+    words = list(vocab.keys())
     return vectors, vectorizer
 
 def dim_reduction(X):
@@ -124,27 +141,39 @@ def analyze(prefix, data_set, num_k):
     p, c = run_predictions(prefix, v, m, data_set)
     return p, c
 
-def expand_clusters(prefix, counts, predictions, depth):
-    print("Expand clusters called with prefix: " + prefix)
+def dump_text(prefix, data_set):
+    filename = cluster_dir + prefix + "cluster.txt"
+    with io.open(filename, "w", encoding="utf-8") as f:
+        for d in data_set:
+            f.write(d + u"\n")
+
+def expand_clusters(prefix, counts, predictions, num_samples, depth):
+    print("Expand clusters called with prefix: " + prefix + ", num_samples=" + str(num_samples))
     depth += 1
     for index, value in counts.iteritems():
-        if value > 1000:
-            new_prefix = prefix + str(index) + "_"
-            data_set = predictions[index]
+        new_prefix = prefix + str(index) + "_"
+        data_set = predictions[index]
+        n_samples = len(data_set)
+        dump_text(new_prefix, data_set)
+        if value > (num_samples * 0.1):
             p, c = analyze(new_prefix, data_set, num_k)
             if depth < 3:
-                expand_clusters(new_prefix, c, p, depth)
+                expand_clusters(new_prefix, c, p, n_samples, depth)
             else:
                 print("Hit maximum depth")
 
 if __name__ == '__main__':
     num_c = 300
     num_k = 30
+    random.seed(1)
     save_dir = "k_means_ " + str(num_k)+ "/"
-    use_dim_reduction = False
-    split_into_sentences = False
+    cluster_dir = save_dir + "clusters/"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    if not os.path.exists(cluster_dir):
+        os.makedirs(cluster_dir)
+    use_dim_reduction = False
+    split_into_sentences = False
     json_data = load_data("data/data.json")
     documents = []
     if split_into_sentences == True:
@@ -153,6 +182,8 @@ if __name__ == '__main__':
         documents = json_data
 
 # Perhaps run this in a loop, optimizing num_k
+    num_samples = len(documents)
+    print("Read in " + str(num_samples) + " lines.")
     predictions, counts = analyze("", documents, num_k)
-    expand_clusters("", counts, predictions, 0)
+    expand_clusters("", counts, predictions, num_samples, 0)
 
