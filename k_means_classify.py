@@ -11,7 +11,6 @@ import sys
 import io
 import nltk
 import json
-import random
 
 stopwords = ""
 
@@ -74,10 +73,10 @@ def dim_reduction(X):
     X = lsa.fit_transform(X)
     return X
 
-def cluster(prefix, vectors, vectorizer, num_k):
-    print("k-means clustering with k=" + str(num_k))
+def cluster(prefix, vectors, vectorizer, k):
+    print("k-means clustering with k=" + str(k))
     print("Prefix: " + prefix)
-    model = KMeans(n_clusters=num_k, init='k-means++', max_iter=100, n_init=1, verbose=1)
+    model = KMeans(n_clusters=k, init='k-means++', max_iter=100, n_init=1, random_state=1, verbose=1)
     model_save_path = save_dir + prefix + "k_means_model.sav"
     if os.path.exists(model_save_path):
         print("Loading model from disk.")
@@ -91,7 +90,7 @@ def cluster(prefix, vectors, vectorizer, num_k):
     order_centroids = model.cluster_centers_.argsort()[:, ::-1]
     terms = vectorizer.get_feature_names()
     terms_save_path = save_dir + prefix + "term_labels.json"
-    for i in range(num_k):
+    for i in range(k):
         term_labels[i] = []
         for ind in order_centroids[i, :25]:
             term_labels[i].append(terms[ind])
@@ -105,7 +104,6 @@ def run_predictions(prefix, vectorizer, model, data_set):
     predictions = {}
     counts = {}
     print("Prefix: " + prefix)
-    print("Running predictions")
     predictions_file = save_dir + prefix + "predictions.json"
     counts_file = save_dir + prefix + "counts.json"
     if os.path.exists(predictions_file):
@@ -117,7 +115,7 @@ def run_predictions(prefix, vectorizer, model, data_set):
             print("Loading counts from: " + counts_file)
             counts = json.load(f)
     if len(predictions) < 1 and len(counts) < 1:
-        print("Running prediction on data_set strings.")
+        print("Running predictions.")
         c = 0
         for s in data_set:
             category = predict_val(s, vectorizer, model)
@@ -140,10 +138,10 @@ def run_predictions(prefix, vectorizer, model, data_set):
             json.dump(counts, f, indent=4)
     return predictions, counts
 
-def analyze(prefix, data_set, num_k):
+def analyze(prefix, data_set, k):
     X, v = vectorize(data_set)
     X = dim_reduction(X)
-    m = cluster(prefix, X, v, num_k)
+    m = cluster(prefix, X, v, k)
     p, c = run_predictions(prefix, v, m, data_set)
     return p, c
 
@@ -153,12 +151,12 @@ def dump_text(prefix, data_set):
         for d in data_set:
             f.write(d + u"\n")
 
-def expand_clusters(prefix, counts, predictions, num_samples, depth):
-    print("Expand clusters called with prefix: " + prefix + ", num_samples=" + str(num_samples))
+def expand_clusters(prefix, counts, predictions, num_samples, depth, k):
+    print("Expand clusters called with prefix: " + prefix + ", num_samples=" + str(num_samples) + " k=" + str(k))
     depth += 1
     c_vals = np.array(list(counts.values()))
-    c_std = np.std(c_vals)
-    c_mean = np.mean(c_vals)
+    c_std = int(np.std(c_vals))
+    c_mean = int(np.mean(c_vals))
     print c_vals
     print c_std
     print c_mean
@@ -166,24 +164,23 @@ def expand_clusters(prefix, counts, predictions, num_samples, depth):
     for index, value in counts.iteritems():
         new_prefix = prefix + str(index) + "_"
         data_set = predictions[index]
-        n_samples = len(data_set)
-        new_k = num_k / int(cluster_decay_rate ** depth)
-        print("index: " + str(index) + " n_samples: " + str(n_samples) + "new_k: " + str(new_k))
+        print("index: " + str(index) + " value:" + str(value) + " k: " + str(k))
         dump_text(new_prefix, data_set)
-        if c_std > 200 and value > c_mean:
-            if new_k > 2 and new_k > n_samples and n_samples > min_samples_to_cluster:
-                p, c = analyze(new_prefix, data_set, new_k)
-                if depth <= max_depth:
-                    expand_clusters(new_prefix, c, p, n_samples, depth)
+        if c_std > c_mean:
+            if k > 2 and value > k:
+                if value > int(c_mean * 1.5) and value > min_samples_to_cluster:
+                    print("Analyzing...")
+                    new_k = int(k / cluster_decay_rate)
+                    p, c = analyze(new_prefix, data_set, new_k)
+                    if depth < max_depth:
+                        expand_clusters(new_prefix, c, p, value, depth, new_k)
 
 if __name__ == '__main__':
     num_c = 300
     num_k = 30
-    cluster_split_threshold = 0.05
     cluster_decay_rate = 2
     max_depth = 3
     min_samples_to_cluster = 100
-    random.seed(1)
     save_dir = "k_means_ " + str(num_k)+ "/"
     cluster_dir = save_dir + "clusters/"
     if not os.path.exists(save_dir):
@@ -203,5 +200,5 @@ if __name__ == '__main__':
     num_samples = len(documents)
     print("Read in " + str(num_samples) + " lines.")
     predictions, counts = analyze("", documents, num_k)
-    expand_clusters("", counts, predictions, num_samples, 0)
+    expand_clusters("", counts, predictions, num_samples, 0, num_k)
 
