@@ -4,14 +4,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
+import numpy as np
 import pickle
 import os
+import sys
 import io
 import nltk
 import json
 import random
 
 stopwords = ""
+
+def print_progress():
+    sys.stdout.write("#")
+    sys.stdout.flush()
 
 def upperfirst(x):
     return x[0].upper() + x[1:]
@@ -51,9 +57,9 @@ def get_vocab(documents):
 def vectorize(documents):
     print("Vectorizing with tf-idf")
     if stopwords != "":
-        vectorizer = TfidfVectorizer(stop_words=stop_words, lowercase=False, min_df=5)
+        vectorizer = TfidfVectorizer(stop_words=stop_words, lowercase=False)
     else:
-        vectorizer = TfidfVectorizer(lowercase=False, min_df=5)
+        vectorizer = TfidfVectorizer(lowercase=False)
     vectors = vectorizer.fit_transform(documents)
     vocab = vectorizer.vocabulary_
     words = list(vocab.keys())
@@ -116,7 +122,7 @@ def run_predictions(prefix, vectorizer, model, data_set):
         for s in data_set:
             category = predict_val(s, vectorizer, model)
             if c % 100 == 0:
-                print("Processed " + str(c) + " samples.")
+                print_progress()
             c += 1
             if category not in predictions:
                 predictions[category] = [s]
@@ -150,21 +156,33 @@ def dump_text(prefix, data_set):
 def expand_clusters(prefix, counts, predictions, num_samples, depth):
     print("Expand clusters called with prefix: " + prefix + ", num_samples=" + str(num_samples))
     depth += 1
+    c_vals = np.array(list(counts.values()))
+    c_std = np.std(c_vals)
+    c_mean = np.mean(c_vals)
+    print c_vals
+    print c_std
+    print c_mean
+
     for index, value in counts.iteritems():
         new_prefix = prefix + str(index) + "_"
         data_set = predictions[index]
         n_samples = len(data_set)
+        new_k = num_k / int(cluster_decay_rate ** depth)
+        print("index: " + str(index) + " n_samples: " + str(n_samples) + "new_k: " + str(new_k))
         dump_text(new_prefix, data_set)
-        if value > (num_samples * 0.1):
-            p, c = analyze(new_prefix, data_set, num_k)
-            if depth < 3:
-                expand_clusters(new_prefix, c, p, n_samples, depth)
-            else:
-                print("Hit maximum depth")
+        if c_std > 200 and value > c_mean:
+            if new_k > 2 and new_k > n_samples and n_samples > min_samples_to_cluster:
+                p, c = analyze(new_prefix, data_set, new_k)
+                if depth <= max_depth:
+                    expand_clusters(new_prefix, c, p, n_samples, depth)
 
 if __name__ == '__main__':
     num_c = 300
     num_k = 30
+    cluster_split_threshold = 0.05
+    cluster_decay_rate = 2
+    max_depth = 3
+    min_samples_to_cluster = 100
     random.seed(1)
     save_dir = "k_means_ " + str(num_k)+ "/"
     cluster_dir = save_dir + "clusters/"
