@@ -5,6 +5,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
 import numpy as np
+import argparse
 import pickle
 import os
 import sys
@@ -41,7 +42,6 @@ def split_into_sentences(raw_data):
 
 def predict_val(sentence, vectorizer, model):
     Y = vectorizer.transform([sentence])
-    Y = dim_reduction(Y)
     prediction = model.predict(Y)
     return int(prediction[0])
 
@@ -64,19 +64,10 @@ def vectorize(documents):
     words = list(vocab.keys())
     return vectors, vectorizer
 
-def dim_reduction(X):
-    if use_dim_reduction == False:
-        return X
-    svd = TruncatedSVD(n_components=num_c, n_iter=100)
-    normalizer = Normalizer(copy=False)
-    lsa = make_pipeline(svd, normalizer)
-    X = lsa.fit_transform(X)
-    return X
-
 def cluster(prefix, vectors, vectorizer, k):
     print("k-means clustering with k=" + str(k))
     print("Prefix: " + prefix)
-    model = KMeans(n_clusters=k, init='k-means++', max_iter=100, n_init=1, random_state=1, verbose=1)
+    model = KMeans(n_clusters=k, init='k-means++', max_iter=100, n_init=1, random_state=random_seed, verbose=1)
     model_save_path = save_dir + prefix + "k_means_model.sav"
     if os.path.exists(model_save_path):
         print("Loading model from disk.")
@@ -140,7 +131,6 @@ def run_predictions(prefix, vectorizer, model, data_set):
 
 def analyze(prefix, data_set, k):
     X, v = vectorize(data_set)
-    X = dim_reduction(X)
     m = cluster(prefix, X, v, k)
     p, c = run_predictions(prefix, v, m, data_set)
     return p, c
@@ -175,12 +165,28 @@ def expand_clusters(prefix, counts, predictions, num_samples, depth, k):
                     if depth < max_depth:
                         expand_clusters(new_prefix, c, p, value, depth, new_k)
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-k', type=int, default=30,
+                       help='Number of centroids')
+    parser.add_argument('--max_depth', type=int, default=3,
+                       help='maximum recursion depth')
+    parser.add_argument('--random_seed', type=int, default=1,
+                       help='random seed')
+    parser.add_argument('--min_to_cluster', type=int, default=100,
+                       help='minimum number of samples to force a new cluster')
+    parser.add_argument('--cluster_decay_rate', type=float, default=3.0,
+                       help='rate at which clusters shrink per pass')
+    args = parser.parse_args()
+    return args
+
 if __name__ == '__main__':
-    num_c = 300
-    num_k = 30
-    cluster_decay_rate = 2
-    max_depth = 3
-    min_samples_to_cluster = 100
+    args = get_args()
+    num_k = args.k
+    cluster_decay_rate = args.cluster_decay_rate
+    max_depth = args.max_depth
+    min_samples_to_cluster = args.min_to_cluster
+    random_seed = args.random_seed
     save_dir = "k_means_ " + str(num_k)+ "/"
     cluster_dir = save_dir + "clusters/"
     if not os.path.exists(save_dir):
