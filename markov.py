@@ -3,10 +3,14 @@ import json
 import os
 
 markov_model = None
+save_dir = "markov/"
 
-if os.path.exists("save/markov.json"):
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+
+if os.path.exists(save_dir + "markov.json"):
     print("Loading pre-saved model")
-    with open("save/markov.json", "r") as f:
+    with open(save_dir + "markov.json", "r") as f:
         model_json = json.load(f)
         markov_model = markovify.Text.from_json(model_json)
 else:
@@ -19,7 +23,7 @@ else:
         markov_model = markovify.Text(text)
         print("Saving pre-trained model")
         model_json = markov_model.to_json()
-        with open("save/markov.json", "w") as f:
+        with open(save_dir + "markov.json", "w") as f:
             json.dump(model_json, f, indent=4)
 
 if markov_model is not None:

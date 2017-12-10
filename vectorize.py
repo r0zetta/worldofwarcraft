@@ -7,6 +7,7 @@ import nltk
 import json
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+save_dir = "embeddings/"
 
 def load_data(input_file):
     raw_data = []
@@ -71,9 +72,9 @@ if __name__ == '__main__':
     print("Training...")
     word_vectors.train(sentences, total_examples=sentence_count, epochs=epoch_count)
 
-    if not os.path.exists("save"):
-        os.makedirs("save")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     print("Saving model...")
-    word_vectors.save(os.path.join("save/word_vectors.w2v"))
+    word_vectors.save(os.path.join(save_dir + "word_vectors.w2v"))
 
     print("Done")

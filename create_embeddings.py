@@ -5,12 +5,17 @@ import gensim.models.word2vec as w2v
 from tensorflow.contrib.tensorboard.plugins import projector
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 
-if __name__ == '__main__':
-    if not os.path.exists("embeddings"):
-        os.makedirs("embeddings")
+save_dir = "embeddings/"
 
-    print("Loading model...")
-    word2vec = w2v.Word2Vec.load("save/word_vectors.w2v")
+if __name__ == '__main__':
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    if os.path.exists(save_dir + "word_vectors.w2v"):
+        print("Loading model...")
+        word2vec = w2v.Word2Vec.load(save_dir + "word_vectors.w2v")
+    else:
+        assert False, "No saved model"
 
     all_word_vectors_matrix = word2vec.wv.syn0
     num_words = len(all_word_vectors_matrix)
@@ -18,7 +23,7 @@ if __name__ == '__main__':
 
     vocab = word2vec.wv.vocab
     print("Vocab length: " + str(len(vocab)))
-    dim = word2vec.wv["and"].shape[0]
+    dim = word2vec.wv["."].shape[0]
     print("Tensor dimensions: " + str(dim))
 
     print("Creating embeddings list...")
@@ -38,11 +43,11 @@ if __name__ == '__main__':
     sess.run(set_x, feed_dict={place: embedding})
 
     print("Writing word vectors...")
-    with open('embeddings/metadata.tsv', 'w') as f:
+    with open(save_dir + "metadata.tsv", "w") as f:
         for word, obj in vocab.iteritems():
             f.write(word + '\n')
 
-    summary_writer = tf.summary.FileWriter('embeddings', sess.graph)
+    summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
     config = projector.ProjectorConfig()
     embedding_conf = config.embeddings.add()
     embedding_conf.tensor_name = 'embedding:0'
@@ -51,6 +56,6 @@ if __name__ == '__main__':
 
     print("Saving session...")
     saver = tf.train.Saver()
-    saver.save(sess, "embeddings/model.ckpt")
+    saver.save(sess, save_dir + "model.ckpt")
     print("To show embeddings, run:")
-    print("tensorboard --logdir=embeddings")
+    print("tensorboard --logdir=" + save_dir)

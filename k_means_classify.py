@@ -1,10 +1,17 @@
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
-from sklearn.metrics import adjusted_rand_score
 import pickle
 import os
 import nltk
 import json
+
+save_dir = "k_means/"
+num_c = 300
+num_k = 70
+use_dim_reduction = False
 
 def upperfirst(x):
     return x[0].upper() + x[1:]
@@ -27,34 +34,44 @@ def split_into_sentences(raw_data):
     print("Raw sentence count: " + str(num_raw_sentences))
     return raw_sentences
 
-def predict(sentence, vectorizer, model):
-    prediction = predict_val(sentence, vectorizer, model)
-    print("Prediction for \"" + sentence + "\": " + str(prediction))
-
 def predict_val(sentence, vectorizer, model):
     Y = vectorizer.transform([sentence])
+    Y = dim_reduction(Y)
     prediction = model.predict(Y)
     return int(prediction[0])
 
-def cluster(prefix, documents, num_k):
-    print("Prefix: " + prefix)
-    print("Vectorizing")
+def vectorize(documents):
+    print("Vectorizing with tf-idf")
     vectorizer = TfidfVectorizer(stop_words='english')
-    X = vectorizer.fit_transform(documents)
+    vectors = vectorizer.fit_transform(documents)
+    return vectors, vectorizer
+
+def dim_reduction(X):
+    if use_dim_reduction == False:
+        return X
+    svd = TruncatedSVD(n_components=num_c, n_iter=100)
+    normalizer = Normalizer(copy=False)
+    lsa = make_pipeline(svd, normalizer)
+    X = lsa.fit_transform(X)
+    return X
+
+def cluster(prefix, vectors, vectorizer, num_k):
+    print("k-means clustering with k=" + str(num_k))
+    print("Prefix: " + prefix)
     model = KMeans(n_clusters=num_k, init='k-means++', max_iter=100, n_init=1, verbose=1)
-    model_save_path = "save/" + prefix + "k_means_model.sav"
+    model_save_path = save_dir + prefix + "k_means_model.sav"
     if os.path.exists(model_save_path):
         print("Loading model from disk.")
         model = pickle.load(open(model_save_path, "rb"))
     else:
         print("Clustering")
-        model.fit(X)
+        model.fit(vectors)
         print("Saving model to: " +  model_save_path)
         pickle.dump(model, open(model_save_path, "wb"))
     term_labels = {}
     order_centroids = model.cluster_centers_.argsort()[:, ::-1]
     terms = vectorizer.get_feature_names()
-    terms_save_path = "save/" + prefix + "term_labels.json"
+    terms_save_path = save_dir + prefix + "term_labels.json"
     for i in range(num_k):
         term_labels[i] = []
         for ind in order_centroids[i, :25]:
@@ -63,15 +80,15 @@ def cluster(prefix, documents, num_k):
     if not os.path.exists(terms_save_path):
         with open(terms_save_path, "w") as f:
             json.dump(term_labels, f, indent=4)
-    return vectorizer, model
+    return model
 
 def run_predictions(prefix, vectorizer, model, data_set):
     predictions = {}
     counts = {}
     print("Prefix: " + prefix)
     print("Running predictions")
-    predictions_file = "save/" + prefix + "predictions.json"
-    counts_file = "save/" + prefix + "counts.json"
+    predictions_file = save_dir + prefix + "predictions.json"
+    counts_file = save_dir + prefix + "counts.json"
     if os.path.exists(predictions_file):
         with open(predictions_file, "r") as f:
             print("Loading predictions from: " + predictions_file)
@@ -104,8 +121,32 @@ def run_predictions(prefix, vectorizer, model, data_set):
             json.dump(counts, f, indent=4)
     return predictions, counts
 
+def analyze(prefix, data_set, num_k):
+    X, v = vectorize(data_set)
+    X = dim_reduction(X)
+    m = cluster(prefix, X, v, num_k)
+    p, c = run_predictions(prefix, v, m, data_set)
+    return p, c
+
+def expand_clusters(prefix, counts, predictions, depth):
+    depth += 1
+    for index, value in counts.iteritems():
+        if value > 1000:
+            if prefix == "":
+                prefix = str(index) + "_"
+            else:
+                prefix = prefix + "_" + str(index) + "_"
+            data_set = predictions[index]
+            p, c = analyze(prefix, data_set, num_k)
+            if depth < 5:
+                expand_clusters(prefix, c, p, depth)
+            else:
+                print("Hit maximum depth")
+
 if __name__ == '__main__':
     split_into_sentences = False
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     json_data = load_data("data/data.json")
     documents = []
     if split_into_sentences == True:
@@ -114,14 +155,6 @@ if __name__ == '__main__':
         documents = json_data
 
 # Perhaps run this in a loop, optimizing num_k
-    num_k = 70
-    vectorizer, model = cluster("", documents, num_k)
-    predictions, counts = run_predictions("", vectorizer, model, json_data)
-
-    for index, value in counts.iteritems():
-        if value > 1000:
-            prefix = "cluster_" + str(index) + "_"
-            data_set = predictions[index]
-            v, m = cluster(prefix, data_set, num_k)
-            p, c = run_predictions(prefix, v, m, data_set)
+    predictions, counts = analyze("", documents, num_k)
+    expand_clusters("", counts, predictions, 0)
 
