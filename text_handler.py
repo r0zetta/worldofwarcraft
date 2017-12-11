@@ -2,11 +2,16 @@ import numpy as np
 import string
 import collections
 import re
+import sys
 import io
 import os
 import json
 
 punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
+
+def print_progress():
+    sys.stdout.write("#")
+    sys.stdout.flush()
 
 def process_punctuation(words):
     ret = []
@@ -17,32 +22,26 @@ def process_punctuation(words):
         # Handle multiple - and . between words
         m = re.search("(\w+)[\-\.]{2,}(\w+)$", word)
         if m is not None:
-            #print "[0]: " + word
             return [m.group(1), m.group(2)], True
         # Handle no space after full stop or comma
         m = re.search("(\w{2,})[\.\,](\w{2,})", word)
         if m is not None:
-            #print "[1]: " + word
             return [m.group(1), ".", m.group(2)], True
         # Handle multiple - , and . at end of word
         m = re.search("(.+)[\-\.\,]{2,}$", word)
         if m is not None:
-            #print "[2]: " + word
             return [m.group(1)], True
         # Handle !!?!?!?!? and !!!!11!1 cases
         m = re.search("(.+)([\!\?1]{2,}$)", word)
         if m is not None:
-            #print "[3]: " + word
             return [m.group(1), m.group(2)], True
         # Handle /, (, ), +, >, <, ", ? with no spaces around them
         m = re.search("(\w+)([\/\)\(\+\>\<\,\"\?])(\w+)", word)
         if m is not None:
-            #print "[4]: " + word
             return [m.group(1), m.group(2), m.group(3)], True
         # Handle ... with no space after
         m = re.search("(\w+)([\.]{3,})(\w+)", word)
         if m is not None:
-            #print "[5]: " + word
             return [m.group(1), m.group(2), m.group(3)], True
         # Strip punctuation from beginning and end of words
         for p in punct:
@@ -104,12 +103,32 @@ def split_line_into_words(line):
             lost_words += 1
     return ret, lost_words
 
+def split_input_into_sentences(raw_data):
+    ret = []
+    lost_words = 0
+    count = 0
+    for line in raw_data:
+        count += 1
+        if count % 100 == 0:
+            print_progress()
+        tokens, lost = split_line_into_words(line)
+        if len(tokens) > 0:
+                ret.append(tokens)
+        lost_words += lost
+    num_tokens = len(ret)
+    print("Input text had: " + str(num_tokens) + " sentences.")
+    print("Words lost from cleanup: " + str(lost_words))
+    return ret
+
 # Read input text, split it into an array of words, and return that
 def split_input_into_words(raw_data):
     ret = []
     lost_words = 0
-    print("Splitting input into words.")
+    count = 0
     for line in raw_data:
+        count += 1
+        if count % 100 == 0:
+            print_progress()
         tokens, lost = split_line_into_words(line)
         if len(tokens) > 0:
             for t in tokens:
@@ -123,8 +142,11 @@ def split_input_into_words(raw_data):
 # Read input text and return a list of characters
 def split_input_into_chars(raw_data):
     ret = []
-    print("Splitting input into chars.")
+    count = 0
     for line in raw_data:
+        count += 1
+        if count % 100 == 0:
+            print_progress()
         line = ''.join(x for x in line if x in string.printable)
         for c in list(line):
             ret.append(c)
@@ -161,7 +183,6 @@ def load_input_from_file(input_file):
         return load_input_from_txt(input_file)
 
 def load_and_tokenize(input_file, split_mode):
-    print("Loading data from " + input_file)
     raw_data = load_input_from_file(input_file)
     if raw_data is None:
         assert False, "Failed to load input data"
