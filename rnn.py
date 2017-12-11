@@ -217,6 +217,9 @@ def generate_text(args):
                 return(int(np.searchsorted(t, np.random.rand(1)*s)))
 
             sentence_length = 0
+            max_sentence_length = 200
+            if args.tokenize == "chars":
+                max_sentence_length = 1500
             while finished == False:
                 x = np.zeros((1, 1))
                 x[0, 0] = vocab.get(word, 0)
@@ -226,14 +229,17 @@ def generate_text(args):
                 sample = weighted_pick(p)
                 pred = vocab_inv[sample]
                 sentence_length += 1
-                if pred in punct:
-                    ret += pred
-                else:
-                    if new_sentence == True:
+                if args.tokenize == "words":
+                    if pred in punct:
                         ret += pred
-                        new_sentence = False
                     else:
-                        ret += ' ' + pred
+                        if new_sentence == True:
+                            ret += pred
+                            new_sentence = False
+                        else:
+                            ret += ' ' + pred
+                else:
+                    ret += pred
                 word = pred
                 if pred == "." or pred == "?" or pred == "!" or sentence_length > 200:
                     sentence_count += 1
