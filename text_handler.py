@@ -1,4 +1,5 @@
 import numpy as np
+import string
 import collections
 import re
 import io
@@ -124,6 +125,7 @@ def split_input_into_chars(raw_data):
     ret = []
     print("Splitting input into chars.")
     for line in raw_data:
+        line = ''.join(x for x in line if x in string.printable)
         for c in list(line):
             ret.append(c)
     num_tokens = len(ret)
