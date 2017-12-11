@@ -290,6 +290,7 @@ def train_model(args):
     train_writer = tf.summary.FileWriter(log_dir)
     starting_epoch = 0
     print("Starting session.")
+    saved_batch_pointer = 0
     with tf.Session() as sess:
         train_writer.add_graph(sess.graph)
         tf.global_variables_initializer().run()
@@ -297,29 +298,15 @@ def train_model(args):
         if restore_checkpoint == True:
             print("Restoring checkpoint")
             saver.restore(sess, ckpt.model_checkpoint_path)
-            bp = model.batch_pointer.eval()
             print("Saved batch pointer: " + str(saved_batch_pointer))
-            print("Model batch pointer: " + str(bp))
-            if saved_batch_pointer != bp:
-                sys.exit(0)
-            else:
-                if bp < num_batches:
-                    print("Batch pointer was larger than number of batches. Starting at zero.")
-                    batch_pointer = 0
-                else:
-                    batch_pointer = bp
-            ep = model.epoch_pointer.eval()
-            print("Model epoch pointer: " + str(ep))
             print("Saved epoch pointer: " + str(saved_epoch_pointer))
-            if saved_epoch_pointer != ep:
-                sys.exit(0)
-            else:
-                starting_epoch = ep
+            starting_epoch = saved_epoch_pointer
         try:
             for e in range(starting_epoch, args.num_epochs):
                 sess.run(tf.assign(model.lr, args.learning_rate * (args.decay_rate ** e)))
                 state = sess.run(model.initial_state)
-                batch_pointer = 0
+                batch_pointer = saved_batch_pointer
+                saved_batch_pointer = 0
                 speed = 0
                 for b in range(batch_pointer, num_batches):
                     start = time.time()
