@@ -241,7 +241,7 @@ def generate_text(args):
                 else:
                     ret += pred
                 word = pred
-                if pred == "." or pred == "?" or pred == "!" or sentence_length > 200:
+                if pred == "." or pred == "?" or pred == "!" or sentence_length > max_sentence_length:
                     sentence_count += 1
                     sentence_length = 0
                     new_sentence = True
