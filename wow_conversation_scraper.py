@@ -146,11 +146,13 @@ def organize_conversation(posts):
         else:
             replied_ids[first_post_id].append(p["post_id"])
     for key, values in replied_ids.iteritems():
-        question = posts_map[key]
-        for v in values:
-            answer = posts_map[v]
-            qa = [question, answer]
-            conv.append(qa)
+        if key in posts_map:
+            question = posts_map[key]
+            for v in values:
+                if v in posts_map:
+                    answer = posts_map[v]
+                    qa = [question, answer]
+                    conv.append(qa)
     return conv
 
 def scrape_thread(url):
