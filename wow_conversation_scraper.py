@@ -14,14 +14,12 @@ visited_urls = []
 
 def dump_data(var, name):
     filename = "conv_data/" + name
-    print("Writing data file: " + filename)
     with open(filename, "w") as file:
         json.dump(var, file, indent=4)
 
 def load_data(name):
     filename = "conv_data/" + name
     if os.path.exists(filename):
-        print("Loading " + filename)
         with open(filename, "r") as file:
             return json.load(file)
 
@@ -60,6 +58,7 @@ def get_page_source(url):
 # Note that it skips blue "sticky" posts found at the top of each page
 def process_threadlist(url):
     ret = []
+    post_count = 0
     base_domain = "https://us.battle.net"
     soup = get_page_source(url)
     for p in soup.find_all('a', class_="ForumTopic"):
@@ -71,13 +70,14 @@ def process_threadlist(url):
         dft = json.loads(p["data-forum-topic"])
         if "lastPosition" in dft:
             context["posts"] = dft["lastPosition"]
+            post_count += dft["lastPosition"]
             if dft["lastPosition"] == 0:
                 continue
         link = p.get('href')
         if link is not None:
             context["link"] = base_domain + link
         ret.append(context)
-    return ret
+    return ret, post_count
 
 # This function looks for a next button on a forum thread page and returns it, if found
 def get_next_button(soup):
@@ -118,16 +118,18 @@ def process_forum_topic(url):
 
 def get_threads(url_list, count):
     threads = []
+    post_count_total = 0
     for url in url_list:
         for page in range(count):
             page_url = url + "?page=" + str(page + 1)
             print("Getting threads from URL: " + page_url)
-            new_threads = process_threadlist(page_url)
+            new_threads, post_count = process_threadlist(page_url)
             threads += new_threads
             thread_total = len(threads)
-            print("Got: " + str(thread_total) + " threads.")
+            post_count_total += post_count
+            print("Got: " + str(thread_total) + " threads, containing " + str(post_count_total) + " posts.")
             dump_data(threads, "threads.json")
-    return threads
+    return threads, post_count_total
 
 def organize_conversation(posts):
     conv = []
@@ -209,19 +211,21 @@ if __name__ == '__main__':
     if not os.path.exists("conv_data"):
         print("Creating data dir")
         os.makedirs("conv_data")
-    threads = get_threads(start_urls, num_pages_to_visit)
+    threads, post_count = get_threads(start_urls, num_pages_to_visit)
     thread_total = len(threads)
-    print("Got: " + str(thread_total) + " threads.")
+    print("Enuerated a total of: " + str(thread_total) + " threads, with " + str(post_count) + " posts.")
     dump_data(threads, "threads.json")
     thread_count = 1
+    post_count_total = 0
     all_authors = []
     all_posts = []
     all_conversations = []
     for t in threads:
         url = t["link"]
-        print("[" + str(thread_count) + "/" + str(thread_total) + "]: " + url)
+        print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] ")
         thread_count += 1
         thread_posts = scrape_thread(url)
+        post_count_total += len(thread_posts)
         all_posts += thread_posts
         conv = organize_conversation(thread_posts)
         all_conversations += conv
