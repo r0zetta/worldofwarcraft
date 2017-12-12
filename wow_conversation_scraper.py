@@ -172,9 +172,6 @@ def scrape_thread(url):
         print("New posts collected so far in this thread: " + str(post_count))
         if next_button is not None:
             sub_pages += 1
-    print("For URL: " + url)
-    print("Sub pages: " + str(sub_pages))
-    print("Posts: " + str(post_count))
     return thread_posts
 
 def test():
@@ -213,7 +210,7 @@ if __name__ == '__main__':
         os.makedirs("conv_data")
     threads, post_count = get_threads(start_urls, num_pages_to_visit)
     thread_total = len(threads)
-    print("Enuerated a total of: " + str(thread_total) + " threads, with " + str(post_count) + " posts.")
+    print("Enumerated a total of: " + str(thread_total) + " threads, with " + str(post_count) + " posts.")
     dump_data(threads, "threads.json")
     thread_count = 1
     post_count_total = 0
@@ -222,7 +219,8 @@ if __name__ == '__main__':
     all_conversations = []
     for t in threads:
         url = t["link"]
-        print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] ")
+        title = t["title"]
+        print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] " + title)
         thread_count += 1
         thread_posts = scrape_thread(url)
         post_count_total += len(thread_posts)
