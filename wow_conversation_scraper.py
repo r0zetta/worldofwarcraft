@@ -153,8 +153,9 @@ def organize_conversation(posts):
             for v in values:
                 if v in posts_map:
                     answer = posts_map[v]
-                    qa = [question, answer]
-                    conv.append(qa)
+                    if question != answer:
+                        qa = [question, answer]
+                        conv.append(qa)
     return conv
 
 def scrape_thread(url):
