@@ -25,6 +25,7 @@ def load_data(name):
 
 # Attempt to fetch URL, handling timeout, and retrying
 def fetch_url(url):
+    retries = 0
     while True:
         try:
             r = requests.get(url, timeout=30)
@@ -39,19 +40,23 @@ def fetch_url(url):
         except requests.exceptions.RequestException as ef:
             print ("Fatal Error: ", ef)
             break
+        if retries > 5:
+            return None
         print("Retrying in 10 seconds.")
         time.sleep(10)
+        retries += 1
 
 # This function loads a URL and throws it into BeautifulSoup for parsing
 # This function returns a BeautifulSoup object
 def get_page_source(url):
     global visited_urls
     page = fetch_url(url)
-    if url not in visited_urls:
-        visited_urls.append(url)
-    html_code = page.content
-    soup = BeautifulSoup(html_code, "lxml")
-    return soup
+    if page is not None:
+        if url not in visited_urls:
+            visited_urls.append(url)
+        html_code = page.content
+        soup = BeautifulSoup(html_code, "lxml")
+        return soup
 
 # Iterates the list of posts on each forum main page
 # This returns a list of URLs found
@@ -93,6 +98,8 @@ def get_next_button(soup):
 def process_forum_topic(url):
     ret = []
     soup = get_page_source(url)
+    if soup is None:
+        return None, None
     # Get "next" link, if it exists
     next_button = get_next_button(soup)
     full_info = soup.find_all("div", class_="TopicPost")
@@ -224,17 +231,18 @@ if __name__ == '__main__':
         print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] " + title)
         thread_count += 1
         thread_posts = scrape_thread(url)
-        post_count_total += len(thread_posts)
-        all_posts += thread_posts
-        conv = organize_conversation(thread_posts)
-        all_conversations += conv
-        just_text = get_just_text(all_posts)
-        authors = get_authors(all_posts)
-        dump_data(authors, "authors.json")
-        dump_data(all_conversations, "conv.json")
-        dump_data(just_text, "data.json")
-        dump_data(all_posts, "full_data.json")
-        dump_data(visited_urls, "visited.json")
+        if len(thread_posts) > 0:
+            post_count_total += len(thread_posts)
+            all_posts += thread_posts
+            conv = organize_conversation(thread_posts)
+            all_conversations += conv
+            just_text = get_just_text(all_posts)
+            authors = get_authors(all_posts)
+            dump_data(authors, "authors.json")
+            dump_data(all_conversations, "conv.json")
+            dump_data(just_text, "data.json")
+            dump_data(all_posts, "full_data.json")
+            dump_data(visited_urls, "visited.json")
     print("Done collecting")
 
 
