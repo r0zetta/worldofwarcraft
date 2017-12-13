@@ -19,8 +19,12 @@ def process_punctuation(words):
     suffix = None
     changed = False
     for word in words:
+        # Handle multiple > and <
+        m = re.search("(\w+)[\>\<]{2,}", word)
+        if m is not None:
+            return [m.group(1)], True
         # Handle multiple - and . between words
-        m = re.search("(\w+)[\-\.]{2,}(\w+)$", word)
+        m = re.search("(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
         if m is not None:
             return [m.group(1), m.group(2)], True
         # Handle no space after full stop or comma
@@ -28,11 +32,11 @@ def process_punctuation(words):
         if m is not None:
             return [m.group(1), ".", m.group(2)], True
         # Handle multiple - , and . at end of word
-        m = re.search("(.+)[\-\.\,]{2,}$", word)
+        m = re.search("(\w+)[\-\.\,]{2,}$", word)
         if m is not None:
             return [m.group(1)], True
         # Handle !!?!?!?!? and !!!!11!1 cases
-        m = re.search("(.+)([\!\?1]{2,}$)", word)
+        m = re.search("(\w+)([\!\?1]{2,})$", word)
         if m is not None:
             return [m.group(1), m.group(2)], True
         # Handle /, (, ), +, >, <, ", ? with no spaces around them
@@ -66,6 +70,8 @@ def process_punctuation(words):
 # Process each word, splitting punctuation off as separate words
 def process_word(word):
     ret = []
+    if word.isspace():
+        return [" "]
     word = word.strip()
     if len(word) < 2:
         return [word]
@@ -89,10 +95,12 @@ def is_ascii(s):
 def split_line_into_words(line):
     ret = []
     lost_words = 0
-    words = line.split()
+    words = re.split(r'(\s+)', line)
     for w in words:
         if len(w) < 30:
-            if is_ascii(w):
+            if w == "\n":
+                ret.append(w)
+            elif is_ascii(w):
                 tokens = process_word(w)
                 if tokens is not None:
                     for t in tokens:
@@ -111,6 +119,8 @@ def split_input_into_sentences(raw_data):
         count += 1
         if count % 100 == 0:
             print_progress()
+        if line[-1:] != "\n":
+            line = line + "\n"
         tokens, lost = split_line_into_words(line)
         if len(tokens) > 0:
                 ret.append(tokens)
@@ -129,6 +139,8 @@ def split_input_into_words(raw_data):
         count += 1
         if count % 100 == 0:
             print_progress()
+        if line[-1:] != "\n":
+            line = line + "\n"
         tokens, lost = split_line_into_words(line)
         if len(tokens) > 0:
             for t in tokens:
@@ -147,6 +159,8 @@ def split_input_into_chars(raw_data):
         count += 1
         if count % 100 == 0:
             print_progress()
+        if line[-1:] != "\n":
+            line = line + "\n"
         line = ''.join(x for x in line if x in string.printable)
         for c in list(line):
             ret.append(c)

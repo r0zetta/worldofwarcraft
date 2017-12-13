@@ -220,7 +220,6 @@ def generate_text(args):
             max_tokens = args.n * 20
             if args.tokenize == "chars":
                 max_tokens = args.n * 100
-            punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
             while finished == False:
                 x = np.zeros((1, 1))
                 x[0, 0] = vocab.get(word, 0)
@@ -237,13 +236,7 @@ def generate_text(args):
                     if ret.endswith("."):
                         sentence_count -= 1
                         print("Sentence: " + str(sentence_count))
-                if args.tokenize == "words":
-                    if pred not in punct:
-                        if ret[-1:] not in ["\"", "\'", "[", "("]:
-                            ret += ' '
-                    ret += pred
-                else:
-                    ret += pred
+                ret += pred
                 word = pred
                 if sentence_count > args.n:
                     print("Hit max sentences")
