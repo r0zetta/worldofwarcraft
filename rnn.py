@@ -20,6 +20,7 @@ save_dir = "rnn_save"
 data_dir = "data"
 log_dir = "logs"
 input_file = os.path.join(data_dir, "data.json")
+tokens_file = os.path.join(save_dir, "tokens.json")
 vocab_file = os.path.join(save_dir, "vocab.pkl")
 vocab_json = os.path.join(save_dir, "vocab.json")
 tensor_file = os.path.join(save_dir, "tensors.npy")
@@ -138,6 +139,8 @@ def build_vocab(tokens):
 def process_input_data(input_file, tokenize):
     print("Processing input data")
     tokens = load_and_tokenize(input_file, tokenize)
+    with open(tokens_file, "w") as f:
+        json.dump(tokens, f, indent=4)
     vocab, vocab_inv = build_vocab(tokens)
     vocab_size = len(vocab_inv)
     print("Vocab size: " + str(vocab_size))
@@ -345,9 +348,9 @@ def get_args():
                        help='number of layers in the RNN')
     parser.add_argument('--model', type=str, default='lstm',
                        help='rnn, gru, or lstm')
-    parser.add_argument('--batch_size', type=int, default=50,
+    parser.add_argument('--batch_size', type=int, default=20,
                        help='minibatch size')
-    parser.add_argument('--seq_length', type=int, default=25,
+    parser.add_argument('--seq_length', type=int, default=100,
                        help='RNN sequence length')
     parser.add_argument('--num_epochs', type=int, default=1000,
                        help='number of epochs')
@@ -357,7 +360,7 @@ def get_args():
                        help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=5.,
                        help='clip gradients at this value')
-    parser.add_argument('--learning_rate', type=float, default=0.0005,
+    parser.add_argument('--learning_rate', type=float, default=0.002,
                        help='learning rate')
     parser.add_argument('--decay_rate', type=float, default=0.97,
                        help='decay rate for rmsprop')
