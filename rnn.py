@@ -15,7 +15,6 @@ import json
 import time
 import sys
 
-punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
 
 save_dir = "rnn_save"
 data_dir = "data"
@@ -216,10 +215,12 @@ def generate_text(args):
                 s = np.sum(weights)
                 return(int(np.searchsorted(t, np.random.rand(1)*s)))
 
-            sentence_length = 0
-            max_sentence_length = 200
+            sentence_count = 0
+            token_count = 0
+            max_tokens = args.n * 20
             if args.tokenize == "chars":
-                max_sentence_length = 1500
+                max_tokens = args.n * 100
+            punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
             while finished == False:
                 x = np.zeros((1, 1))
                 x[0, 0] = vocab.get(word, 0)
@@ -228,27 +229,28 @@ def generate_text(args):
                 p = probs[0]
                 sample = weighted_pick(p)
                 pred = vocab_inv[sample]
-                sentence_length += 1
+                token_count += 1
+                if pred in [".", "?", "!"]:
+                    sentence_count += 1
+                    print("Sentence: " + str(sentence_count))
+                if pred == ".":
+                    if ret.endswith("."):
+                        sentence_count -= 1
+                        print("Sentence: " + str(sentence_count))
                 if args.tokenize == "words":
-                    if pred in punct:
-                        ret += pred
-                    else:
-                        if new_sentence == True:
-                            ret += pred
-                            new_sentence = False
-                        else:
-                            ret += ' ' + pred
+                    if pred not in punct:
+                        if ret[-1:] not in ["\"", "\'", "[", "("]:
+                            ret += ' '
+                    ret += pred
                 else:
                     ret += pred
                 word = pred
-                if pred == "." or pred == "?" or pred == "!" or sentence_length > max_sentence_length:
-                    sentence_count += 1
-                    sentence_length = 0
-                    new_sentence = True
-                    print("Generated " + str(sentence_count) + " sentences.")
-                    ret += "\n"
-                    if sentence_count > args.n:
-                        finished = True
+                if sentence_count > args.n:
+                    print("Hit max sentences")
+                    finished = True
+                if token_count > max_tokens:
+                    print("Hit max tokens")
+                    finished = True
             print(ret)
 
 def save_trainer_state(epochs, batch_position):
