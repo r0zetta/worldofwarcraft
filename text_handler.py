@@ -7,8 +7,6 @@ import io
 import os
 import json
 
-punct = ["\"", "\'", "(", ")", "?", "!", ".", ",", ":", "-", ";", "[", "]", "/", "*", "\n"]
-
 def print_progress():
     sys.stdout.write("#")
     sys.stdout.flush()
@@ -17,76 +15,110 @@ def process_punctuation(words):
     ret = []
     prefix = None
     suffix = None
-    changed = False
     for word in words:
+        changed = False
         # Handle multiple > and <
-        m = re.search("(\w+)[\>\<]{2,}", word)
-        if m is not None:
-            return [m.group(1)], True
+        if changed == False:
+            m = re.search("(\w+)[\>\<]{2,}", word)
+            if m is not None:
+                ret.append(m.group(1))
+                changed = True
+        # Handle multiple > and < between words
+        if changed == False:
+            m = re.search("(\w+)[\>\<]{2,}(\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                changed = True
         # Handle multiple - and . between words
-        m = re.search("(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
-        if m is not None:
-            return [m.group(1), m.group(2)], True
+        if changed == False:
+            m = re.search("(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                changed = True
         # Handle no space after full stop or comma
-        m = re.search("(\w{2,})[\.\,](\w{2,})", word)
-        if m is not None:
-            return [m.group(1), ".", m.group(2)], True
+        if changed == False:
+            m = re.search("(\w{2,})([\.\,])(\w{2,})", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                ret.append(m.group(3))
+                changed = True
         # Handle multiple - , and . at end of word
-        m = re.search("(\w+)[\-\.\,]{2,}$", word)
-        if m is not None:
-            return [m.group(1)], True
+        if changed == False:
+            m = re.search("(\w+)[\-\.\,]{2,}$", word)
+            if m is not None:
+                ret.append(m.group(1))
+                changed = True
         # Handle !!?!?!?!? and !!!!11!1 cases
-        m = re.search("(\w+)([\!\?1]{2,})$", word)
-        if m is not None:
-            return [m.group(1), m.group(2)], True
+        if changed == False:
+            m = re.search("(\w+)([\!\?1]{2,})$", word)
+            if m is not None:
+                ret.append(m.group(1))
+                changed = True
         # Handle /, (, ), +, >, <, ", ? with no spaces around them
-        m = re.search("(\w+)([\/\)\(\+\>\<\,\"\?])(\w+)", word)
-        if m is not None:
-            return [m.group(1), m.group(2), m.group(3)], True
+        if changed == False:
+            m = re.search("(\w+)([\/\)\(\+\>\<\,\"\?])(\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                ret.append(m.group(3))
+                changed = True
         # Handle ... with no space after
-        m = re.search("(\w+)([\.]{3,})(\w+)", word)
-        if m is not None:
-            return [m.group(1), m.group(2), m.group(3)], True
-        # Strip punctuation from beginning and end of words
-        for p in punct:
-            if len(word) > 1:
-                if word.startswith(p):
-                    prefix = p
-                    word = word[1:]
-                    changed = True
-        for p in punct:
-            if len(word) > 1:
-                if word.endswith(p):
-                    suffix = p
-                    word = word[:-1]
-                    changed = True
-        if prefix is not None:
-            ret.append(prefix)
-        ret.append(word)
-        if suffix is not None:
-            ret.append(suffix)
+        if changed == False:
+            m = re.search("(\w+)([\.]{3,})(\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append("...")
+                ret.append(m.group(3))
+                changed = True
+        # Strip punctuation from beginning of words
+        if changed == False:
+            m = re.search("([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])(\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                changed = True
+        # Strip punctuation from end of words
+        if changed == False:
+            m = re.search("(\w+)([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                changed = True
+        if changed == False:
+            ret.append(word)
     return ret, changed
 
 # Process each word, splitting punctuation off as separate words
 def process_word(word):
     ret = []
+    start_len = len(word)
+    orig_word = word
     if word.isspace():
         return [" "]
     word = word.strip()
+    word = word.replace(u'\u201c', u'"').replace(u'\u201d', u'"').replace(u'\u2018', u'\'').replace(u'\u2019', u'\'').replace(u'\u2013', u'-')
+    word = ''.join(x for x in word if x in string.printable)
+
     if len(word) < 2:
         return [word]
-    if "http" in word:
-        return "_URL_"
-    if "@" in word:
-        return "_EMAIL_"
-    if word.startswith("multimedia:"):
-        return None
     changed = True
     words = [word]
     while changed == True:
         words, changed = process_punctuation(words)
-    for word in words:
-        ret.append(word)
+    end_len = 0
+    end_word = ""
+    for w in words:
+        ret.append(w)
+        end_word += w
+    end_len += len(end_word)
+    if end_len > start_len:
+        print orig_word
+        print end_word
+        print words
+        assert False, "Something went wrong"
     return ret
 
 def is_ascii(s):
