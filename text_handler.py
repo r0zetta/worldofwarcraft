@@ -15,8 +15,6 @@ def process_punctuation(words):
     ret = []
     prefix = None
     suffix = None
-    print("Process punct input:")
-    print words
     for word in words:
         changed = False
         # Handle 3 words with crap between them
@@ -134,8 +132,6 @@ def process_punctuation(words):
                 changed = True
         if changed == False:
             ret.append(word)
-    print("Process punct output:")
-    print ret
     return ret, changed
 
 # Process each word, splitting punctuation off as separate words
