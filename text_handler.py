@@ -15,8 +15,24 @@ def process_punctuation(words):
     ret = []
     prefix = None
     suffix = None
+    print("Process punct input:")
+    print words
     for word in words:
         changed = False
+        # Handle 3 words with crap between them
+        if changed == False:
+            m = re.search("(\w+\W+)(\w+\W+\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(" ")
+                ret.append(m.group(2))
+                changed = True
+        # Handle crap the the end of a word
+        if changed == False:
+            m = re.search("(\w+)[\<\>]$", word)
+            if m is not None:
+                ret.append(m.group(1))
+                changed = True
         # Handle multiple > and <
         if changed == False:
             m = re.search("(\w+)[\>\<]{2,}", word)
@@ -35,6 +51,7 @@ def process_punctuation(words):
             m = re.search("(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
+                ret.append(" ")
                 ret.append(m.group(2))
                 changed = True
         # Handle no space after full stop or comma
@@ -43,6 +60,7 @@ def process_punctuation(words):
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
+                ret.append(" ")
                 ret.append(m.group(3))
                 changed = True
         # Handle multiple - , and . at end of word
@@ -56,12 +74,31 @@ def process_punctuation(words):
             m = re.search("(\w+)([\!\?1]{2,})$", word)
             if m is not None:
                 ret.append(m.group(1))
+                ret.append(m.group(2))
                 changed = True
         # Handle /, (, ), +, >, <, ", ? with no spaces around them
         if changed == False:
-            m = re.search("(\w+)([\/\)\(\+\>\<\,\"\?])(\w+)", word)
+            m = re.search("(\w+)([\/\+\>\<])(\w+)", word)
             if m is not None:
                 ret.append(m.group(1))
+                ret.append(" ")
+                ret.append(m.group(2))
+                ret.append(" ")
+                ret.append(m.group(3))
+                changed = True
+        if changed == False:
+            m = re.search("(\w+)([\)\,\"\?])(\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
+                ret.append(" ")
+                ret.append(m.group(3))
+                changed = True
+        if changed == False:
+            m = re.search("(\w+)([\(])(\w+)", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(" ")
                 ret.append(m.group(2))
                 ret.append(m.group(3))
                 changed = True
@@ -71,6 +108,14 @@ def process_punctuation(words):
             if m is not None:
                 ret.append(m.group(1))
                 ret.append("...")
+                ret.append(m.group(3))
+                changed = True
+        # Strip punctuation from beginning and end of words
+        if changed == False:
+            m = re.search("([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])(\w+)([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])", word)
+            if m is not None:
+                ret.append(m.group(1))
+                ret.append(m.group(2))
                 ret.append(m.group(3))
                 changed = True
         # Strip punctuation from beginning of words
@@ -89,6 +134,8 @@ def process_punctuation(words):
                 changed = True
         if changed == False:
             ret.append(word)
+    print("Process punct output:")
+    print ret
     return ret, changed
 
 # Process each word, splitting punctuation off as separate words
@@ -114,11 +161,6 @@ def process_word(word):
         ret.append(w)
         end_word += w
     end_len += len(end_word)
-    if end_len > start_len:
-        print orig_word
-        print end_word
-        print words
-        assert False, "Something went wrong"
     return ret
 
 def is_ascii(s):
