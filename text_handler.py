@@ -19,7 +19,7 @@ def process_punctuation(words):
         changed = False
         # Handle 3 words with crap between them
         if changed == False:
-            m = re.search("(\w+\W+)(\w+\W+\w+)", word)
+            m = re.search("^(\w+\W+)(\w+\W+\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(" ")
@@ -27,26 +27,26 @@ def process_punctuation(words):
                 changed = True
         # Handle crap the the end of a word
         if changed == False:
-            m = re.search("(\w+)[\<\>]$", word)
+            m = re.search("^(\w+)[\<\>]$", word)
             if m is not None:
                 ret.append(m.group(1))
                 changed = True
         # Handle multiple > and <
         if changed == False:
-            m = re.search("(\w+)[\>\<]{2,}", word)
+            m = re.search("^(\w+)[\>\<]{2,}$", word)
             if m is not None:
                 ret.append(m.group(1))
                 changed = True
         # Handle multiple > and < between words
         if changed == False:
-            m = re.search("(\w+)[\>\<]{2,}(\w+)", word)
+            m = re.search("^(\w+)[\>\<]{2,}(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
                 changed = True
         # Handle multiple - and . between words
         if changed == False:
-            m = re.search("(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
+            m = re.search("^(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(" ")
@@ -54,7 +54,7 @@ def process_punctuation(words):
                 changed = True
         # Handle no space after full stop or comma
         if changed == False:
-            m = re.search("(\w{2,})([\.\,])(\w{2,})", word)
+            m = re.search("^(\w{2,})([\.\,])(\w{2,})$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
@@ -63,20 +63,20 @@ def process_punctuation(words):
                 changed = True
         # Handle multiple - , and . at end of word
         if changed == False:
-            m = re.search("(\w+)[\-\.\,]{2,}$", word)
+            m = re.search("^(\w+)[\-\.\,]{2,}$", word)
             if m is not None:
                 ret.append(m.group(1))
                 changed = True
         # Handle !!?!?!?!? and !!!!11!1 cases
         if changed == False:
-            m = re.search("(\w+)([\!\?1]{2,})$", word)
+            m = re.search("^(\w+)([\!\?1]{2,})$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
                 changed = True
         # Handle /, (, ), +, >, <, ", ? with no spaces around them
         if changed == False:
-            m = re.search("(\w+)([\/\+\>\<])(\w+)", word)
+            m = re.search("^(\w+)([\/\+\>\<])(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(" ")
@@ -85,7 +85,7 @@ def process_punctuation(words):
                 ret.append(m.group(3))
                 changed = True
         if changed == False:
-            m = re.search("(\w+)([\)\,\"\?])(\w+)", word)
+            m = re.search("^(\w+)([\)\,\"\?])(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
@@ -93,7 +93,7 @@ def process_punctuation(words):
                 ret.append(m.group(3))
                 changed = True
         if changed == False:
-            m = re.search("(\w+)([\(])(\w+)", word)
+            m = re.search("^(\w+)([\(])(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(" ")
@@ -102,7 +102,7 @@ def process_punctuation(words):
                 changed = True
         # Handle ... with no space after
         if changed == False:
-            m = re.search("(\w+)([\.]{3,})(\w+)", word)
+            m = re.search("^(\w+)([\.]{3,})(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append("...")
@@ -110,7 +110,7 @@ def process_punctuation(words):
                 changed = True
         # Strip punctuation from beginning and end of words
         if changed == False:
-            m = re.search("([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])(\w+)([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])", word)
+            m = re.search("^([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])(\w+)([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
@@ -118,14 +118,14 @@ def process_punctuation(words):
                 changed = True
         # Strip punctuation from beginning of words
         if changed == False:
-            m = re.search("([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])(\w+)", word)
+            m = re.search("^([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
                 changed = True
         # Strip punctuation from end of words
         if changed == False:
-            m = re.search("(\w+)([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])", word)
+            m = re.search("^(\w+)([\"\'\(\)\?\!\.\,\:\-\;\[\]\/\*\n])$", word)
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
