@@ -142,6 +142,8 @@ def process_word(word):
     if word.isspace():
         return [" "]
     word = word.strip()
+    if word.startswith("http"):
+        return [""]
     word = word.replace(u'\u201c', u'"').replace(u'\u201d', u'"').replace(u'\u2018', u'\'').replace(u'\u2019', u'\'').replace(u'\u2013', u'-')
     word = ''.join(x for x in word if x in string.printable)
 
@@ -154,7 +156,8 @@ def process_word(word):
     end_len = 0
     end_word = ""
     for w in words:
-        ret.append(w)
+        if len(w) > 0:
+            ret.append(w)
         end_word += w
     end_len += len(end_word)
     return ret
