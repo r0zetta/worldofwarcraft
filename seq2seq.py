@@ -37,7 +37,7 @@ validY = tl.prepro.remove_pad_sequences(validY)
 xseq_len = len(trainX)#.shape[-1]
 yseq_len = len(trainY)#.shape[-1]
 assert xseq_len == yseq_len
-batch_size = 32
+batch_size = 6
 n_step = int(xseq_len/batch_size)
 xvocab_size = len(metadata['idx2w'])
 emb_dim = 1024
@@ -173,13 +173,13 @@ for epoch in range(n_epoch):
                         target_seqs: _target_seqs,
                         target_mask: _target_mask})
 
-        if n_iter % 200 == 0:
-            print("Epoch[%d/%d] step:[%d/%d] loss:%f took:%.5fs" % (epoch, n_epoch, n_iter, n_step, err, time.time() - step_time))
+#        if n_iter % 200 == 0:
+        print("Epoch[%d/%d] step:[%d/%d] loss:%f took:%.5fs" % (epoch, n_epoch, n_iter, n_step, err, time.time() - step_time))
 
         total_err += err; n_iter += 1
 
         ###============= inference
-        if n_iter % 1000 == 0:
+        if n_iter % 10 == 0:
             seeds = ["All i see with rogues is negativity, they all say how rogue is dead in legion.",
                     "I don't know... you seem like the one QQing.",
                     "There is no point in people like OP's friends playing anyway because they will just QQ about everything by the sounds of it.",
@@ -213,7 +213,8 @@ for epoch in range(n_epoch):
                             break
                         sentence = sentence + [w]
                     print(" >", ' '.join(sentence))
+            print("Saving...")
+            tl.files.save_npz(net.all_params, name='n.npz', sess=sess)
 
     print("Epoch[%d/%d] averaged loss:%f took:%.5fs" % (epoch, n_epoch, total_err/n_iter, time.time()-epoch_time))
-
     tl.files.save_npz(net.all_params, name='n.npz', sess=sess)
