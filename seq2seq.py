@@ -15,7 +15,7 @@ import numpy as np
 import time
 
 ###============= prepare data
-from process_conversations import load_data, split_dataset
+from process_conversations import load_data, split_dataset, sanitize, tokenize
 metadata, idx_q, idx_a = load_data()
 (trainX, trainY), (testX, testY), (validX, validY) = split_dataset(idx_q, idx_a)
 
@@ -189,7 +189,9 @@ for epoch in range(n_epoch):
                     "What do you do that takes any skill? Keep your QQ'n up it's working."]
             for seed in seeds:
                 print("Query >", seed)
-                seed_id = [w2idx[w] for w in seed.split(" ")]
+                sanitized = sanitize(seed)
+                tokens = tokenize(sanitized)
+                seed_id = [w2idx[w] for w in tokens]
                 for _ in range(5):  # 1 Query --> 5 Reply
                     # 1. encode, get state
                     state = sess.run(net_rnn.final_state_encode,
