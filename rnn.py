@@ -325,7 +325,6 @@ def train_model(args):
                         saver.save(sess, checkpoint_path, global_step = e * num_batches + b)
                         save_trainer_state(e, batch_pointer)
                         print("Model saved to " + checkpoint_path)
-                        generate_text(args)
         except KeyboardInterrupt:
             print("Keyboard interrupt.")
             print("Saving. Please wait.")
