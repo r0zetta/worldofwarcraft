@@ -347,7 +347,7 @@ def sample(args, context, sess):
     end_id = args["end_id"]
     for seed in seeds:
         print("Query >", seed)
-        sanitized = sanitize(seed)
+        sanitized = sanitize_line(seed)
         tokens = tokenize(sanitized)
         seed_id = [w2idx[w] for w in tokens]
         for _ in range(args["n"]):
