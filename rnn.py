@@ -38,9 +38,6 @@ class Model():
             infer = True
 
         print("Initializing model")
-        print("Args:")
-        for key, value in sorted(args.iteritems()):
-            print("\t" + str(key) + ":\t" + str(value))
         if args["model"] == 'rnn':
             cell_fn = rnn.BasicRNNCell
         elif args["model"] == 'gru':
@@ -382,19 +379,27 @@ def get_cl_args():
     args = parser.parse_args()
     return vars(args)
 
-if __name__ == '__main__':
+def get_args():
     args = None
     saved_args = get_saved_args()
     cl_args = get_cl_args()
     if saved_args is not None:
         args = saved_args
-        args["mode"] = cl_args["mode"]
     else:
         args = cl_args
+    args["mode"] = cl_args["mode"]
+    args["n"] = cl_args["n"]
+    print("Args:")
+    for key, value in sorted(args.iteritems()):
+        print("\t" + str(key) + ":\t" + str(value))
+    save_args(args)
+    return args
+
+if __name__ == '__main__':
     if not os.path.exists(save_dir):
         print("Creating save directory: " + save_dir)
         os.makedirs(save_dir)
-    save_args(args)
+    args = get_args()
     if args["mode"] == "train":
         train_model(args)
     else:
