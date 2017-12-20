@@ -11,6 +11,11 @@ def print_progress():
     sys.stdout.write("#")
     sys.stdout.flush()
 
+def sanitize_line(s):
+    s = s.replace(u'\u201c', u'"').replace(u'\u201d', u'"').replace(u'\u2018', u'\'').replace(u'\u2019', u'\'').replace(u'\u2013', u'-')
+    s = re.sub("\s+", " ", s)
+    return s
+
 def process_punctuation(words):
     ret = []
     prefix = None
@@ -184,26 +189,6 @@ def split_line_into_words(line):
             lost_words += 1
     return ret, lost_words
 
-def split_input_into_sentences(raw_data):
-    ret = []
-    lost_words = 0
-    count = 0
-    for line in raw_data:
-        count += 1
-        if count % 100 == 0:
-            print_progress()
-        if line[-1:] != "\n":
-            line = line + "\n"
-        tokens, lost = split_line_into_words(line)
-        if len(tokens) > 0:
-                ret.append(tokens)
-        lost_words += lost
-    num_tokens = len(ret)
-    print("Input text had: " + str(num_tokens) + " sentences.")
-    print("Words lost from cleanup: " + str(lost_words))
-    return ret
-
-# Read input text, split it into an array of words, and return that
 def split_input_into_words(raw_data):
     ret = []
     lost_words = 0
@@ -224,7 +209,13 @@ def split_input_into_words(raw_data):
     print("Words lost from cleanup: " + str(lost_words))
     return ret
 
-# Read input text and return a list of characters
+def split_line_into_chars(line):
+    ret = []
+    l = ''.join(x for x in line if x in string.printable)
+    for c in list(l):
+        ret.append(c)
+    return ret
+
 def split_input_into_chars(raw_data):
     ret = []
     count = 0
@@ -234,11 +225,28 @@ def split_input_into_chars(raw_data):
             print_progress()
         if line[-1:] != "\n":
             line = line + "\n"
-        line = ''.join(x for x in line if x in string.printable)
-        for c in list(line):
-            ret.append(c)
+        ret = split_line_into_chars(line)
     num_tokens = len(ret)
     print("Input text had: " + str(num_tokens) + " tokens.")
+    return ret
+
+def split_input_into_sentences(raw_data):
+    ret = []
+    lost_words = 0
+    count = 0
+    for line in raw_data:
+        count += 1
+        if count % 100 == 0:
+            print_progress()
+        if line[-1:] != "\n":
+            line = line + "\n"
+        tokens, lost = split_line_into_words(line)
+        if len(tokens) > 0:
+                ret.append(tokens)
+        lost_words += lost
+    num_tokens = len(ret)
+    print("Input text had: " + str(num_tokens) + " sentences.")
+    print("Words lost from cleanup: " + str(lost_words))
     return ret
 
 def load_input_from_json(input_file):

@@ -337,7 +337,10 @@ def get_saved_args():
     if os.path.exists(save_dir):
         if os.path.exists(args_file):
             with open(args_file, "r") as f:
-                saved = json.load(f)
+                try:
+                    saved = json.load(f)
+                except:
+                        saved = None
     return saved
 
 def save_args(args):
