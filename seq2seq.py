@@ -265,7 +265,8 @@ def model(encode_seqs, decode_seqs, args, mode):
     dropout = 0.5
     reuse = False
     vocab_size = args["vocab_size"]
-    emb_dim = args["emb_dim"]
+    rnn_size = args["rnn_size"]
+    num_layers = args["num_layers"]
     if mode == "sample":
         dropout = None
         reuse = True
@@ -273,24 +274,24 @@ def model(encode_seqs, decode_seqs, args, mode):
         with tf.variable_scope("embedding") as vs:
             net_encode = EmbeddingInputlayer(inputs = encode_seqs,
                                              vocabulary_size = vocab_size,
-                                             embedding_size = emb_dim,
+                                             embedding_size = rnn_size,
                                              name = 'seq_embedding')
             vs.reuse_variables()
             tl.layers.set_name_reuse(True)
             net_decode = EmbeddingInputlayer(inputs = decode_seqs,
                                              vocabulary_size = vocab_size,
-                                             embedding_size = emb_dim,
+                                             embedding_size = rnn_size,
                                              name = 'seq_embedding')
         net_rnn = Seq2Seq(net_encode,
                           net_decode,
                           cell_fn = tf.contrib.rnn.BasicLSTMCell,
-                          n_hidden = emb_dim,
+                          n_hidden = rnn_size,
                           initializer = tf.random_uniform_initializer(-0.1, 0.1),
                           encode_sequence_length = retrieve_seq_length_op2(encode_seqs),
                           decode_sequence_length = retrieve_seq_length_op2(decode_seqs),
                           initial_state_encode = None,
                           dropout = dropout,
-                          n_layer = 3,
+                          n_layer = num_layers,
                           return_seq_2d = True,
                           name = 'seq2seq')
         net_out = DenseLayer(net_rnn,
@@ -348,7 +349,7 @@ def sample(args, context, sess):
     for seed in seeds:
         print("Query >", seed)
         sanitized = sanitize_line(seed)
-        tokens = tokenize(sanitized)
+        tokens = tokenize(sanitized, args["tokenize"])
         seed_id = [w2idx[w] for w in tokens]
         for _ in range(args["n"]):
             state = sess.run(context["net_rnn"].final_state_encode,
@@ -411,6 +412,10 @@ def get_cl_args():
                        help='maximum sentence length')
     parser.add_argument('--batch_size', type=int, default=5,
                        help='minibatch size')
+    parser.add_argument('--rnn_size', type=int, default=1024,
+                       help='number of neurons')
+    parser.add_argument('--num_layers', type=int, default=3,
+                       help='number of layers')
     parser.add_argument('--num_epochs', type=int, default=1000,
                        help='number of epochs')
     parser.add_argument('--output_every', type=int, default=1,
@@ -461,7 +466,6 @@ if __name__ == '__main__':
     args["end_id"] = params["end_id"]
     args["pad_id"] = params["pad_id"]
     args["n_step"] = int(len(training_set["trainX"])/args["batch_size"])
-    args["emb_dim"] = 1024
     save_args(args)
 
     context = {}
@@ -499,7 +503,7 @@ if __name__ == '__main__':
     tl.layers.initialize_global_variables(sess)
     if os.path.exists(save_file):
         print("Restoring previous save.")
-        tl.files.load_and_assign_npz(sess=sess, name=save_file, network=net)
+        tl.files.load_and_assign_npz(sess=sess, name=save_file, network=context["net"])
     else:
         print("No previous save file found.")
 
