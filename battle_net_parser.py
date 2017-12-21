@@ -10,7 +10,7 @@ import time
 # URLs for the General and Class Development US forums on battle.net
 save_dir = "battle_net_data"
 start_urls = ["https://us.battle.net/forums/en/wow/22814068/", "https://us.battle.net/forums/en/wow/984270/"]
-num_pages_to_visit = 5
+num_pages_to_visit = 3
 visited_urls = []
 
 def dump_data(var, name):
@@ -226,28 +226,30 @@ if __name__ == '__main__':
     all_authors = []
     all_posts = []
     all_conversations = []
-    all_threads = {}
+    all_threads = []
     for t in threads:
         url = t["link"]
         title = t["title"]
-        all_threads["title"] = title
-        all_threads["link"] = url
+        all_threads_item = {}
+        all_threads_item["title"] = title
+        all_threads_item["link"] = url
         print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] " + title)
         thread_count += 1
         thread_posts = scrape_thread(url)
         if len(thread_posts) > 0:
             thread_post_count = len(thread_posts)
-            all_threads["count"] = thread_post_count
+            all_threads_item["count"] = thread_post_count
             post_count_total += thread_post_count
             all_posts += thread_posts
             conv = organize_conversation(thread_posts)
-            all_threads["posts"] = thread_posts
-            all_threads["conversations"] = conv
+            all_threads_item["posts"] = thread_posts
+            all_threads_item["conversations"] = conv
             all_conversations += conv
             just_text = get_just_text(all_posts)
-            all_threads["text"] = just_text
+            all_threads_item["text"] = just_text
             authors = get_authors(all_posts)
-            all_threads["authors"] = authors
+            all_threads_item["authors"] = authors
+            all_threads.append(all_threads_item)
             dump_data(authors, "authors.json")
             dump_data(all_conversations, "conv.json")
             dump_data(just_text, "data.json")

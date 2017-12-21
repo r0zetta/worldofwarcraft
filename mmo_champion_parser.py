@@ -10,7 +10,7 @@ import time
 # URLs for the General and Class Development US forums on battle.net
 save_dir = "mmo_champion_data"
 start_urls = ["https://www.mmo-champion.com/forums/266-General-Discussions"]
-num_pages_to_visit = 2
+num_pages_to_visit = 3
 visited_urls = []
 
 def dump_data(var, name):
@@ -83,19 +83,22 @@ def process_threadlist(url):
             m = re.search("Replies:\s([0-9\,]+)", stats)
             if m is not None:
                 posts = m.group(1)
-                post_count = int(posts.replace(",", ""))
-                context["posts"] = post_count
+                pc = int(posts.replace(",", ""))
+                context["posts"] = pc
+                post_count += pc
         ret.append(context)
     return ret, post_count
 
 # This function looks for a next button on a forum thread page and returns it, if found
 def get_next_button(soup):
     next_url = None
-    prev_next = soup.find("span", class_="prev_next")
+    prev_next = soup.find_all("a", rel="next")
     if prev_next is not None:
-        n = prev_next.find("a", rel="next")
-        if n is not None:
-            next_url = n.get('href')
+        for p in prev_next:
+            nu = p.get('href')
+            m = re.search("\/page[0-9]+$", nu)
+            if m is not None:
+                next_url = nu
     return next_url
 
 # Scrape posts from each page of a thread
@@ -129,9 +132,8 @@ def process_forum_topic(url):
                 post["author_name"] = author
                 post["author_id"] = user_id
         else:
-            print("Username not found!!!")
-            print p
-            sys.exit(0)
+            post["author_name"] = "guest"
+            post["author_id"] = "66666666"
         content = p.find("div", class_="content")
         if content is not None:
             quote_container = content.find("div", class_="quote_container")
@@ -254,28 +256,30 @@ if __name__ == '__main__':
     all_authors = []
     all_posts = []
     all_conversations = []
-    all_threads = {}
+    all_threads = []
     for t in threads:
         url = t["link"]
         title = t["title"]
-        all_threads["title"] = title
-        all_threads["link"] = url
+        all_threads_item = {}
+        all_threads_item["title"] = title
+        all_threads_item["link"] = url
         print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] " + title)
         thread_count += 1
         thread_posts = scrape_thread(url)
         if len(thread_posts) > 0:
             thread_post_count = len(thread_posts)
-            all_threads["count"] = thread_post_count
+            all_threads_item["count"] = thread_post_count
             post_count_total += thread_post_count
             all_posts += thread_posts
             conv = organize_conversation(thread_posts)
-            all_threads["posts"] = thread_posts
-            all_threads["conversations"] = conv
+            all_threads_item["posts"] = thread_posts
+            all_threads_item["conversations"] = conv
             all_conversations += conv
             just_text = get_just_text(all_posts)
-            all_threads["text"] = just_text
+            all_threads_item["text"] = just_text
             authors = get_authors(all_posts)
-            all_threads["authors"] = authors
+            all_threads_item["authors"] = authors
+            all_threads.append(all_threads_item)
             dump_data(authors, "authors.json")
             dump_data(all_conversations, "conv.json")
             dump_data(just_text, "data.json")
@@ -283,5 +287,4 @@ if __name__ == '__main__':
             dump_data(visited_urls, "visited.json")
             dump_data(all_threads, "all_threads.json")
     print("Done collecting")
-
 
