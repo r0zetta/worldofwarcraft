@@ -10,7 +10,7 @@ import time
 # URLs for the General and Class Development US forums on battle.net
 save_dir = "battle_net_data"
 start_urls = ["https://us.battle.net/forums/en/wow/22814068/", "https://us.battle.net/forums/en/wow/984270/"]
-num_pages_to_visit = 10
+num_pages_to_visit = 5
 visited_urls = []
 
 def dump_data(var, name):
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         url = t["link"]
         title = t["title"]
         all_threads["title"] = title
-        all_thread["link"] = link
+        all_threads["link"] = url
         print("Thread [" + str(thread_count) + "/" + str(thread_total) + "] Posts [" + str(post_count_total) + "/" + str(post_count) + "] " + title)
         thread_count += 1
         thread_posts = scrape_thread(url)

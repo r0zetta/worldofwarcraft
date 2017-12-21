@@ -86,8 +86,6 @@ def process_threadlist(url):
                 post_count = int(posts.replace(",", ""))
                 context["posts"] = post_count
         ret.append(context)
-        print context
-        print post_count
     return ret, post_count
 
 # This function looks for a next button on a forum thread page and returns it, if found
@@ -110,8 +108,6 @@ def process_forum_topic(url):
         return None, None
     # Get "next" link, if it exists
     next_button = get_next_button(soup)
-    if next_button is not None:
-        print("Next button: " + next_button)
     posts = soup.find_all("li", class_="postbitlegacy")
     for p in posts:
         post = {}
