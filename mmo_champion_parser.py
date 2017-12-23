@@ -161,6 +161,9 @@ def process_forum_topic(url):
             if "replied_to_text" in post:
                 if len(post["replied_to_text"]) > 0:
                     t = t.replace(post["replied_to_text"], "")
+            t = re.sub("Originally Posted by .+\n+", "", t)
+            t = re.sub("[\n\r]{2,}", "\n", t)
+            t = re.sub("[\t]{1,}", " ", t)
             post["post_content"] = t
         ret.append(post)
     return ret, next_button
