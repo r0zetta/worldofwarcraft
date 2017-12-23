@@ -67,7 +67,8 @@ def process_threadlist(url):
     post_count = 0
     base_domain = "https://www.mmo-champion.com/"
     soup = get_page_source(url)
-    threadlist = soup.find_all('li', class_="threadbit")
+    threads = soup.find('ol', class_="threads")
+    threadlist = threads.find_all('li', class_="threadbit")
     for t in threadlist:
         context = {}
         p = t.find('a', class_="title")
@@ -76,17 +77,24 @@ def process_threadlist(url):
             context["link"] = base_domain + link
         title = p.get_text().strip()
         if title is not None:
+            m = re.search("Sticky\:\s.+", title)
+            if m is not None:
+                print("Skipping sticky post: " + title)
+                return None, 0
             context["title"] = title
         s = t.find("ul", class_="threadstats td alt")
         if s is not None:
             stats = t.get_text().strip()
+            context["posts"] = 0
             m = re.search("Replies:\s([0-9\,]+)", stats)
             if m is not None:
                 posts = m.group(1)
                 pc = int(posts.replace(",", ""))
+                pc += 1
                 context["posts"] = pc
                 post_count += pc
         ret.append(context)
+        print("Got thread: " + context["title"] + " with " + str(context["posts"]) + " posts.")
     return ret, post_count
 
 # This function looks for a next button on a forum thread page and returns it, if found
@@ -150,6 +158,9 @@ def process_forum_topic(url):
                     t = quote_text.get_text().strip()
                     post["replied_to_text"] = t
             t = content.get_text().strip()
+            if "replied_to_text" in post:
+                if len(post["replied_to_text"]) > 0:
+                    t = t.replace(post["replied_to_text"], "")
             post["post_content"] = t
         ret.append(post)
     return ret, next_button
@@ -162,11 +173,12 @@ def get_threads(url_list, count):
             page_url = url + "/page" + str(page + 1)
             print("Getting threads from URL: " + page_url)
             new_threads, post_count = process_threadlist(page_url)
-            threads += new_threads
-            thread_total = len(threads)
-            post_count_total += post_count
-            print("Got: " + str(thread_total) + " threads, containing " + str(post_count_total) + " posts.")
-            dump_data(threads, "threads.json")
+            if new_threads is not None:
+                threads += new_threads
+                thread_total = len(threads)
+                post_count_total += post_count
+                print("Got: " + str(thread_total) + " threads, containing " + str(post_count_total) + " posts.")
+                dump_data(threads, "threads.json")
     return threads, post_count_total
 
 def organize_conversation(posts):
