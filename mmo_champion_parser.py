@@ -10,7 +10,7 @@ import time
 # URLs for the General and Class Development US forums on battle.net
 save_dir = "mmo_champion_data"
 start_urls = ["https://www.mmo-champion.com/forums/266-General-Discussions"]
-num_pages_to_visit = 3
+num_pages_to_visit = 5
 visited_urls = []
 
 def dump_data(var, name):
@@ -90,6 +90,9 @@ def process_threadlist(url):
             if m is not None:
                 posts = m.group(1)
                 pc = int(posts.replace(",", ""))
+                if pc > 1000:
+                    print("Skipping thread with too many posts: " + title)
+                    return None, 0
                 pc += 1
                 context["posts"] = pc
                 post_count += pc
