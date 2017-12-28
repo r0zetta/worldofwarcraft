@@ -69,6 +69,8 @@ def get_cl_args():
                        help='latent dimension')
     parser.add_argument('--intermediate_dim', type=int, default=1200,
                        help='intermediate dimension')
+    parser.add_argument('--sample_every', type=int, default=20,
+                       help='run sample every x epochs')
     parser.add_argument('--num_epochs', type=int, default=500,
                        help='number of epochs')
     parser.add_argument('--num_features', type=int, default=10,
@@ -310,7 +312,7 @@ def decode_sentence(vectors, args, word2vec):
 
 # input: encoded sentence vector
 # output: encoded sentence vector in dataset with highest cosine similarity
-def find_similar_encoding(sent_vect):
+def find_similar_encoding(sent_vect, sent_encoded):
     all_cosine = []
     for sent in sent_encoded:
         result = 1 - spatial.distance.cosine(sent_vect, sent)
@@ -330,6 +332,36 @@ def shortest_homology(point_one, point_two, num):
         hom_sample.append(point_one + s * dist_vec)
     return hom_sample
 
+def sample(train, test, args, word2vec, encoder, generator):
+    print("Running predict model")
+    sent_encoded = encoder.predict(np.array(train), batch_size = 1)
+    print("Obtained " + str(len(sent_encoded)) + " sentences.")
+    print("".join(decode_sentence(sent_encoded[0], args, word2vec)))
+    print("Running generator model")
+    sent_decoded = generator.predict(sent_encoded)
+    print("Obtained " + str(len(sent_decoded)) + " sentences.")
+    print("".join(decode_sentence(sent_decoded[0], args, word2vec)))
+
+    if args["mode"] != "train":
+
+# The encoder trained above embeds sentences (concatenated word vetors) into a lower dimensional space. The code below takes two of these lower dimensional sentence representations and finds five points between them. It then uses the trained decoder to project these five points into the higher, original, dimensional space. Finally, it reveals the text represented by the five generated sentence vectors by taking each word vector concatenated inside and finding the text associated with it in the word2vec used during preprocessing.
+
+        print("Running shortest homology test 1")
+        test_hom = shortest_homology(sent_encoded[3], sent_encoded[10], 5)
+        for point in test_hom:
+            p = generator.predict(np.array([point]))[0]
+            print("".join(decode_sentence(p, args, word2vec)))
+
+# The code below does the same thing, with one important difference. After sampling equidistant points in the latent space between two sentence embeddings, it finds the embeddings from our encoded dataset those points are most similar to. It then prints the text associated with those vectors.
+#   
+# This allows us to explore how the Variational Autoencoder clusters our dataset of sentences in latent space. It lets us investigate whether sentences with similar concepts or grammatical styles are represented in similar areas of the lower dimensional space.
+
+        print("Running shortest homology test 2")
+        test_hom = shortest_homology(sent_encoded[2], sent_encoded[15], 20)
+        for point in test_hom:
+            p = generator.predict(np.array([find_similar_encoding(point, sent_encoded)]))[0]
+            print("".join(decode_sentence(p, args, word2vec)))
+
 #########################################################
 # Entry point
 #########################################################
@@ -338,6 +370,10 @@ if __name__ == '__main__':
         os.makedirs(save_dir)
     args = get_args()
     args["raw_data_file"] = os.path.join(save_dir, "data.json")
+    train_state_file = os.path.join(save_dir, "train_state.json")
+    current_epoch = 0
+    if os.path.exists(train_state_file):
+        current_epoch = load_json(train_state_file)
 
     train, test, word2vec, features = prepare_data(args)
     args["num_features"] = features
@@ -356,35 +392,19 @@ if __name__ == '__main__':
     cp = [ModelCheckpoint(filepath=checkpoint_file, verbose=1, save_best_only=True)]
 
     if args["mode"] == "train":
-        vae.fit(train, train,
-                shuffle=True,
-                epochs=epochs,
-                batch_size=input_size,
-                validation_data=(test, test), callbacks=cp)
+        print("Engaging training mode.")
+        epochs_per_iter = args["sample_every"]
+        while current_epoch < epochs:
+            print("Current epoch: " + str(current_epoch))
+            vae.fit(train, train,
+                    shuffle=True,
+                    epochs=epochs_per_iter,
+                    batch_size=input_size,
+                    validation_data=(test, test), callbacks=cp)
+            current_epoch += epochs_per_iter
+            save_json(current_epoch, train_state_file)
+            sample(train, test, args, word2vec, encoder, generator)
     else:
-        print("Running predict model")
-        sent_encoded = encoder.predict(np.array(train), batch_size = 1)
-        print("".join(decode_sentence(sent_encoded[0], args, word2vec)))
-        print("Running generator model")
-        sent_decoded = generator.predict(sent_encoded)
-        print("".join(decode_sentence(sent_decoded[0], args, word2vec)))
+        sample(train, test, args, word2vec, encoder, generator)
 
-# The encoder trained above embeds sentences (concatenated word vetors) into a lower dimensional space. The code below takes two of these lower dimensional sentence representations and finds five points between them. It then uses the trained decoder to project these five points into the higher, original, dimensional space. Finally, it reveals the text represented by the five generated sentence vectors by taking each word vector concatenated inside and finding the text associated with it in the word2vec used during preprocessing.
-
-        print("Running shortest homology test 1")
-        test_hom = shortest_homology(sent_encoded[3], sent_encoded[10], 5)
-        for point in test_hom:
-            p = generator.predict(np.array([point]))[0]
-            print("".join(decode_sentence(p, args, word2vec)))
-
-
-# The code below does the same thing, with one important difference. After sampling equidistant points in the latent space between two sentence embeddings, it finds the embeddings from our encoded dataset those points are most similar to. It then prints the text associated with those vectors.
-#   
-# This allows us to explore how the Variational Autoencoder clusters our dataset of sentences in latent space. It lets us investigate whether sentences with similar concepts or grammatical styles are represented in similar areas of the lower dimensional space.
-
-        print("Running shortest homology test 2")
-        test_hom = shortest_homology(sent_encoded[2], sent_encoded[1500], 20)
-        for point in test_hom:
-            p = generator.predict(np.array([find_similar_encoding(point)]))[0]
-            print("".join(decode_sentence(p, args, word2vec)))
 
