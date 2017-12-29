@@ -161,11 +161,16 @@ def create_vae_model(args):
 def split_names_into_chars(input_data):
     words = input_data[0].split(" ")
     print("Got " + str(len(words)) + " words")
+    max_words = len(words)
+    while max_words % 1000 != 0:
+        max_words -= 1
+    print("Using " + str(max_words) + " words")
     max_word_len = 0
     for w in words:
         if len(w) > max_word_len:
             max_word_len = len(w)
     sentences = []
+    word_count = 1
     for w in words:
         sent = []
         word_len = len(w)
@@ -175,6 +180,9 @@ def split_names_into_chars(input_data):
         for _ in range(padding_len):
             sent.append("")
         sentences.append(sent)
+        if word_count >= max_words:
+            break
+        word_count += 1
     print("Got " + str(len(sentences)) + " sentences")
     return sentences
 
@@ -198,8 +206,8 @@ def create_w2v_model(args):
         sentences = split_input_into_sentences(raw_data)
     else:
         sentences = split_names_into_chars(raw_data)
-        epoch_count = 100
-        num_features = 300
+        epoch_count = 200
+        num_features = 10
 
     sentence_count = len(sentences)
     print("Number of sentences: " + str(sentence_count))
@@ -477,6 +485,8 @@ if __name__ == '__main__':
     print("".join(decode_sentence(train[0], args, word2vec)))
 
     args["input_size"] = input_size = 1
+    if args["tokenize"] == "chars":
+        args["input_size"] = input_size = 25
     args["original_dim"] = original_dim = len(train[0])
     epochs = args["num_epochs"]
 
