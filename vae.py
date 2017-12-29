@@ -438,7 +438,7 @@ def shortest_homology(point_one, point_two, num):
 
 def sample(train, test, args, word2vec, encoder, generator):
     print("Running predict model")
-    sent_encoded = encoder.predict(np.array(train), batch_size = 1)
+    sent_encoded = encoder.predict(np.array(train), batch_size = args["input_size"])
     print("Obtained " + str(len(sent_encoded)) + " sentences.")
     print("".join(decode_sentence(sent_encoded[0], args, word2vec)))
     print("Running generator model")
@@ -489,6 +489,8 @@ if __name__ == '__main__':
         args["input_size"] = input_size = 25
     args["original_dim"] = original_dim = len(train[0])
     epochs = args["num_epochs"]
+    if args["tokenize"] == "chars":
+        epochs = epochs * 10
 
     vae, encoder, generator = create_vae_model(args)
     checkpoint_file = os.path.join(save_dir, "model.h5")
