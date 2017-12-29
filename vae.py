@@ -71,7 +71,7 @@ def get_cl_args():
                        help='intermediate dimension')
     parser.add_argument('--sample_every', type=int, default=20,
                        help='run sample every x epochs')
-    parser.add_argument('--num_epochs', type=int, default=500,
+    parser.add_argument('--num_epochs', type=int, default=1000,
                        help='number of epochs')
     parser.add_argument('--num_features', type=int, default=10,
                        help='number of features in w2v model')
@@ -395,7 +395,7 @@ if __name__ == '__main__':
         print("Engaging training mode.")
         epochs_per_iter = args["sample_every"]
         while current_epoch < epochs:
-            print("Current epoch: " + str(current_epoch))
+            print("Current epoch: " + str(current_epoch) + "/" + str(epochs))
             vae.fit(train, train,
                     shuffle=True,
                     epochs=epochs_per_iter,
