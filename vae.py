@@ -486,7 +486,7 @@ if __name__ == '__main__':
 
     args["input_size"] = input_size = 1
     if args["tokenize"] == "chars":
-        args["input_size"] = input_size = 25
+        args["input_size"] = input_size = 100
     args["original_dim"] = original_dim = len(train[0])
     epochs = args["num_epochs"]
     if args["tokenize"] == "chars":
