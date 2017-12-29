@@ -158,6 +158,26 @@ def create_vae_model(args):
 
     return vae, encoder, generator
 
+def split_names_into_chars(input_data):
+    words = input_data[0].split(" ")
+    print("Got " + str(len(words)) + " words")
+    max_word_len = 0
+    for w in words:
+        if len(w) > max_word_len:
+            max_word_len = len(w)
+    sentences = []
+    for w in words:
+        sent = []
+        word_len = len(w)
+        padding_len = max_word_len - word_len
+        for c in list(w):
+            sent.append(c)
+        for _ in range(padding_len):
+            sent.append("")
+        sentences.append(sent)
+    print("Got " + str(len(sentences)) + " sentences")
+    return sentences
+
 def create_w2v_model(args):
     num_features = args["num_features"]
     input_file = args["raw_data_file"]
@@ -173,7 +193,13 @@ def create_w2v_model(args):
     print("Loading raw data")
     raw_data = load_json(input_file)
     print("Tokenizing data")
-    sentences = split_input_into_sentences(raw_data)
+    sentences = []
+    if args["tokenize"] == "words":
+        sentences = split_input_into_sentences(raw_data)
+    else:
+        sentences = split_names_into_chars(raw_data)
+        epoch_count = 100
+        num_features = 300
 
     sentence_count = len(sentences)
     print("Number of sentences: " + str(sentence_count))
@@ -200,43 +226,70 @@ def create_w2v_model(args):
     print("Saving model...")
     word_vectors.save(model_filename)
 
+def vectorize_names(args, tokenized_data, word2vec):
+    print("Vectorizing names")
+    dim0 = word2vec.wv["a"].shape[0]
+    max_name_len = 0
+    null_entry = np.zeros([dim0], dtype=np.float32)
+    for t in tokenized_data:
+        if len(t) > max_name_len:
+            max_name_len = len(t)
+    batch_len = max_name_len * dim0
 
-def prepare_data(args):
-    print("Loading word2vec model")
-    w2v_file = os.path.join(save_dir, "word_vectors.w2v")
-    word2vec = None
-    if not os.path.exists(w2v_file):
-        create_w2v_model(args)
+    print("Maximum name length: " + str(max_name_len))
+    print("Number of features: " + str(max_name_len))
+    print("Batch length: " + str(batch_len))
 
-    word2vec = w2v.Word2Vec.load(w2v_file)
+    print("Vectorizing and padding data")
+    vec_names = []
+    not_added = []
+    for tokens in tokenized_data:
+        entry = []
+        if len(tokens) != max_name_len:
+            print tokens
+            print len(tokens)
+        assert len(tokens) == max_name_len
+        for t in tokens:
+            try:
+                vect = word2vec.wv[t]
+                entry.append(vect)
+            except:
+                not_added.append(t)
+                pass
+        if len(entry) != max_name_len:
+            print entry
+            print len(entry)
+        assert len(entry) == max_name_len
+        vec_names.append(entry)
 
-    all_word_vectors_matrix = word2vec.wv.syn0
-    num_words = len(all_word_vectors_matrix)
-    print("Number of word vectors: " + str(num_words))
+    print(str(len(not_added)) + " characters omitted")
+    print not_added
 
-    vocab = word2vec.wv.vocab
-    print("Vocab length: " + str(len(vocab)))
-    dim = word2vec.wv["."].shape
-    print("Dim: " + str(dim))
-    dim0 = word2vec.wv["."].shape[0]
-    print("Features per word: " + str(dim0))
+    print("Creating batches")
+    batches = []
+    for name in vec_names:
+        entry = []
+        for vec_list in name:
+            for vec in vec_list:
+                entry.append(vec)
+        if len(entry) != batch_len:
+            print entry
+            print len(entry)
+        assert len(entry) == batch_len
+        batches.append(entry)
 
-    print("Loading training data")
-    tokens_file = os.path.join(save_dir, "tokens.json")
-    tokenized_data = load_json(tokens_file)
-    if tokenized_data is None:
-        tokenized_data = load_and_tokenize(args["raw_data_file"], "words")
-        if tokenized_data is None:
-            assert False, "Could not process raw data into tokens."
-        save_json(tokenized_data, tokens_file)
-    else:
-        print("Loaded tokenized data from file.")
+    print(str(len(batches)) + " batches created.")
+    data_array = np.array(batches)
+    print("Full data shape: " + str(data_array.shape))
+    return data_array
 
-    print("Vectorizing data")
+def vectorize_sentences(args, tokenized_data, word2vec):
+    print("Vectorizing sentences")
     vectors = []
     omitted = []
     not_added = 0
     added = 0
+    dim0 = word2vec.wv["a"].shape[0]
     for token in tokenized_data:
         try:
             vect = word2vec.wv[token]
@@ -278,6 +331,49 @@ def prepare_data(args):
         batch_pointer += batch_size
     data_array = np.array(batches)
     print("Full data shape: " + str(data_array.shape))
+    return data_array
+
+def prepare_data(args):
+    print("Loading word2vec model")
+    w2v_file = os.path.join(save_dir, "word_vectors.w2v")
+    word2vec = None
+    if not os.path.exists(w2v_file):
+        create_w2v_model(args)
+
+    word2vec = w2v.Word2Vec.load(w2v_file)
+
+    all_word_vectors_matrix = word2vec.wv.syn0
+    num_words = len(all_word_vectors_matrix)
+    print("Number of word vectors: " + str(num_words))
+
+    vocab = word2vec.wv.vocab
+    print("Vocab length: " + str(len(vocab)))
+    dim = word2vec.wv["a"].shape
+    print("Dim: " + str(dim))
+    dim0 = word2vec.wv["a"].shape[0]
+    print("Features per word: " + str(dim0))
+
+    print("Loading training data")
+    tokens_file = os.path.join(save_dir, "tokens.json")
+    tokenized_data = load_json(tokens_file)
+    if tokenized_data is None:
+        if args["tokenize"] == "words":
+            tokenized_data = load_and_tokenize(args["raw_data_file"], "words")
+        else:
+            raw_data = load_json(args["raw_data_file"])
+            tokenized_data = split_names_into_chars(raw_data)
+        if tokenized_data is None:
+            assert False, "Could not process raw data into tokens."
+        save_json(tokenized_data, tokens_file)
+    else:
+        print("Loaded tokenized data from file.")
+
+    data_array = None
+    if args["tokenize"] == "words":
+        data_array = vectorize_sentences(args, tokenized_data, word2vec)
+    else:
+        data_array = vectorize_names(args, tokenized_data, word2vec)
+
     np.random.shuffle(data_array)
     data_len = len(data_array)
     train_len = int(data_len * 0.8)
