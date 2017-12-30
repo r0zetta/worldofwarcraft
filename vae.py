@@ -13,6 +13,7 @@ import pickle
 import itertools
 import argparse
 import sys
+import random
 import numpy as np
 from scipy import spatial
 from scipy.stats import norm
@@ -65,19 +66,15 @@ def get_cl_args():
                        help='The number of sentences to generate')
     parser.add_argument('--batch_size', type=int, default=300,
                        help='minibatch size')
-    parser.add_argument('--latent_dim', type=int, default=1000,
-                       help='latent dimension')
-    parser.add_argument('--intermediate_dim', type=int, default=1200,
-                       help='intermediate dimension')
-    parser.add_argument('--sample_every', type=int, default=20,
+    parser.add_argument('--sample_every', type=int, default=200,
                        help='run sample every x epochs')
     parser.add_argument('--num_epochs', type=int, default=1000,
                        help='number of epochs')
-    parser.add_argument('--num_features', type=int, default=10,
+    parser.add_argument('--num_features', type=int, default=50,
                        help='number of features in w2v model')
     parser.add_argument('--learning_rate', type=float, default=0.0001,
                        help='learning rate')
-    parser.add_argument('--epsilon_std', type=float, default=1.0,
+    parser.add_argument('--epsilon_std', type=float, default=0.8,
                        help='epsilon std')
     args = parser.parse_args()
     return vars(args)
@@ -98,65 +95,6 @@ def get_args():
     save_args(args)
     return args
 
-def create_vae_model(args):
-    batch_size = args["batch_size"]
-    latent_dim = args["latent_dim"]
-    intermediate_dim = args["intermediate_dim"]
-    epsilon_std = args["epsilon_std"]
-    input_size = args["input_size"]
-    original_dim = args["original_dim"]
-
-    x = Input(batch_shape=(input_size, original_dim))
-    h = Dense(intermediate_dim, activation='relu')(x)
-    z_mean = Dense(latent_dim)(h)
-    z_log_var = Dense(latent_dim)(h)
-
-    def sampling(args):
-        z_mean, z_log_var = args
-        epsilon = K.random_normal(shape=(input_size, latent_dim), mean=0., stddev=epsilon_std)
-        return z_mean + K.exp(z_log_var / 2) * epsilon
-
-    z = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
-
-    decoder_h = Dense(intermediate_dim, activation='relu')
-    decoder_mean = Dense(original_dim, activation='sigmoid')
-    h_decoded = decoder_h(z)
-    x_decoded_mean = decoder_mean(h_decoded)
-
-    def zero_loss(y_true, y_pred):
-        return K.zeros_like(y_pred)
-
-    class CustomVariationalLayer(Layer):
-        def __init__(self, **kwargs):
-            self.is_placeholder = True
-            super(CustomVariationalLayer, self).__init__(**kwargs)
-
-        def vae_loss(self, x, x_decoded_mean):
-            xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
-            kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-            return K.mean(xent_loss + kl_loss)
-
-        def call(self, inputs):
-            x = inputs[0]
-            x_decoded_mean = inputs[1]
-            loss = self.vae_loss(x, x_decoded_mean)
-            self.add_loss(loss, inputs=inputs)
-            return K.ones_like(x)
-
-    loss_layer = CustomVariationalLayer()([x, x_decoded_mean])
-    vae = Model(x, [loss_layer])
-    vae.compile(optimizer='rmsprop', loss=[zero_loss])
-
-# build a model to project inputs on the latent space
-    encoder = Model(x, z_mean)
-
-# build a generator that can sample from the learned distribution
-    decoder_input = Input(shape=(latent_dim,))
-    _h_decoded = decoder_h(decoder_input)
-    _x_decoded_mean = decoder_mean(_h_decoded)
-    generator = Model(decoder_input, _x_decoded_mean)
-
-    return vae, encoder, generator
 
 def split_names_into_chars(input_data):
     words = input_data[0].split(" ")
@@ -171,20 +109,25 @@ def split_names_into_chars(input_data):
             max_word_len = len(w)
     sentences = []
     word_count = 1
+    vocab = []
     for w in words:
         sent = []
         word_len = len(w)
         padding_len = max_word_len - word_len
         for c in list(w):
             sent.append(c)
+            if c not in vocab:
+                vocab.append(c)
         for _ in range(padding_len):
             sent.append("")
         sentences.append(sent)
         if word_count >= max_words:
             break
         word_count += 1
+    vocab_len = len(vocab) + 1
+    print("Vocab len: " + str(vocab_len))
     print("Got " + str(len(sentences)) + " sentences")
-    return sentences
+    return sentences, vocab_len
 
 def create_w2v_model(args):
     num_features = args["num_features"]
@@ -205,10 +148,11 @@ def create_w2v_model(args):
     if args["tokenize"] == "words":
         sentences = split_input_into_sentences(raw_data)
     else:
-        sentences = split_names_into_chars(raw_data)
+        sentences, vocab_len = split_names_into_chars(raw_data)
         epoch_count = 200
-        num_features = 10
+        num_features = vocab_len
 
+    print("Number of features: " + str(num_features))
     sentence_count = len(sentences)
     print("Number of sentences: " + str(sentence_count))
     token_count = sum([len(sentence) for sentence in sentences])
@@ -369,7 +313,7 @@ def prepare_data(args):
             tokenized_data = load_and_tokenize(args["raw_data_file"], "words")
         else:
             raw_data = load_json(args["raw_data_file"])
-            tokenized_data = split_names_into_chars(raw_data)
+            tokenized_data, vocab_len = split_names_into_chars(raw_data)
         if tokenized_data is None:
             assert False, "Could not process raw data into tokens."
         save_json(tokenized_data, tokens_file)
@@ -391,21 +335,22 @@ def prepare_data(args):
     test = data_array[train_len:]
     print("Test data shape: " + str(test.shape))
 
-    return train, test, word2vec, dim0
+    return train, test, word2vec, dim0, tokenized_data
 
 
 def decode_sentence(vectors, args, word2vec):
     vector_count = len(vectors)
-    print("Vectors: " + str(vector_count))
+    #print("Vectors: " + str(vector_count))
     features = args["num_features"]
-    print("Features: " + str(features))
+    #print("Features: " + str(features))
     num_words = vector_count/features
-    print("Decoding " + str(num_words) + " words")
+    #print("Decoding " + str(num_words) + " items")
     decoded_words = []
     for x in range(num_words):
         start_pos = x * features
         word_as_vectors = vectors[start_pos: start_pos + features]
         model_word_vector = np.array(word_as_vectors, dtype='f')
+        #print("Word:" + str(x) + " shape:" + str(model_word_vector.shape))
         #print model_word_vector
         if len(model_word_vector) == 0:
             print("Vector was empty. WTF???!??!?")
@@ -437,14 +382,24 @@ def shortest_homology(point_one, point_two, num):
     return hom_sample
 
 def sample(train, test, args, word2vec, encoder, generator):
+    sep = ""
+    decode_sep = "\n"
+    if args["tokenize"] == "chars":
+        sep = ""
+        decode_sep = " "
     print("Running predict model")
-    sent_encoded = encoder.predict(np.array(train), batch_size = args["input_size"])
-    print("Obtained " + str(len(sent_encoded)) + " sentences.")
-    print("".join(decode_sentence(sent_encoded[0], args, word2vec)))
+    sent_encoded = encoder.predict(np.array(test), batch_size = args["input_size"])
+    print("Obtained " + str(len(sent_encoded)) + " items.")
     print("Running generator model")
     sent_decoded = generator.predict(sent_encoded)
-    print("Obtained " + str(len(sent_decoded)) + " sentences.")
-    print("".join(decode_sentence(sent_decoded[0], args, word2vec)))
+    print("Obtained " + str(len(sent_decoded)) + " items.")
+    print("Decoded length: " + str(len(sent_decoded[0])))
+    output = ""
+    print("Decoding all outputs.")
+    for x in range(len(sent_decoded)):
+        output += (sep.join(decode_sentence(sent_decoded[x], args, word2vec)))
+        output += decode_sep
+    print output
 
     if args["mode"] != "train":
 
@@ -454,7 +409,7 @@ def sample(train, test, args, word2vec, encoder, generator):
         test_hom = shortest_homology(sent_encoded[3], sent_encoded[10], 5)
         for point in test_hom:
             p = generator.predict(np.array([point]))[0]
-            print("".join(decode_sentence(p, args, word2vec)))
+            print(sep.join(decode_sentence(p, args, word2vec)))
 
 # The code below does the same thing, with one important difference. After sampling equidistant points in the latent space between two sentence embeddings, it finds the embeddings from our encoded dataset those points are most similar to. It then prints the text associated with those vectors.
 #   
@@ -464,7 +419,7 @@ def sample(train, test, args, word2vec, encoder, generator):
         test_hom = shortest_homology(sent_encoded[2], sent_encoded[15], 20)
         for point in test_hom:
             p = generator.predict(np.array([find_similar_encoding(point, sent_encoded)]))[0]
-            print("".join(decode_sentence(p, args, word2vec)))
+            print(sep.join(decode_sentence(p, args, word2vec)))
 
 #########################################################
 # Entry point
@@ -479,10 +434,13 @@ if __name__ == '__main__':
     if os.path.exists(train_state_file):
         current_epoch = load_json(train_state_file)
 
-    train, test, word2vec, features = prepare_data(args)
+    random.seed(1)
+    train, test, word2vec, features, tokens = prepare_data(args)
     args["num_features"] = features
     batch_len = features * args["batch_size"]
-    print("".join(decode_sentence(train[0], args, word2vec)))
+    for _ in range(10):
+        choice = random.randrange(len(train))
+        print(str("".join(decode_sentence(train[choice], args, word2vec))))
 
     args["input_size"] = input_size = 1
     if args["tokenize"] == "chars":
@@ -490,9 +448,63 @@ if __name__ == '__main__':
     args["original_dim"] = original_dim = len(train[0])
     epochs = args["num_epochs"]
     if args["tokenize"] == "chars":
-        epochs = epochs * 10
+        epochs = epochs * 100
 
-    vae, encoder, generator = create_vae_model(args)
+    input_size = args["input_size"]
+    intermediate_dim = int(original_dim / 3)
+    latent_dim = int(intermediate_dim * 1.2)
+    epsilon_std = args["epsilon_std"]
+
+    x = Input(batch_shape=(input_size, original_dim))
+    h = Dense(intermediate_dim, activation='relu')(x)
+    z_mean = Dense(latent_dim)(h)
+    z_log_var = Dense(latent_dim)(h)
+
+    def sampling(args):
+        z_mean, z_log_var = args
+        epsilon = K.random_normal(shape=(input_size, latent_dim), mean=0., stddev=epsilon_std)
+        return z_mean + K.exp(z_log_var / 2) * epsilon
+
+    z = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
+
+    decoder_h = Dense(intermediate_dim, activation='relu')
+    decoder_mean = Dense(original_dim, activation='sigmoid')
+    h_decoded = decoder_h(z)
+    x_decoded_mean = decoder_mean(h_decoded)
+
+    def zero_loss(y_true, y_pred):
+        return K.zeros_like(y_pred)
+
+    class CustomVariationalLayer(Layer):
+        def __init__(self, **kwargs):
+            self.is_placeholder = True
+            super(CustomVariationalLayer, self).__init__(**kwargs)
+
+        def vae_loss(self, x, x_decoded_mean):
+            xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
+            kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+            return K.mean(xent_loss + kl_loss)
+
+        def call(self, inputs):
+            x = inputs[0]
+            x_decoded_mean = inputs[1]
+            loss = self.vae_loss(x, x_decoded_mean)
+            self.add_loss(loss, inputs=inputs)
+            return K.ones_like(x)
+
+    loss_layer = CustomVariationalLayer()([x, x_decoded_mean])
+    vae = Model(x, [loss_layer])
+    vae.compile(optimizer='rmsprop', loss=[zero_loss])
+
+# build a model to project inputs on the latent space
+    encoder = Model(x, z_mean)
+
+# build a generator that can sample from the learned distribution
+    decoder_input = Input(shape=(latent_dim,))
+    _h_decoded = decoder_h(decoder_input)
+    _x_decoded_mean = decoder_mean(_h_decoded)
+    generator = Model(decoder_input, _x_decoded_mean)
+
     checkpoint_file = os.path.join(save_dir, "model.h5")
     if os.path.exists(checkpoint_file):
         print("Loading saved model from " + checkpoint_file)
