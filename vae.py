@@ -8,6 +8,7 @@ import nltk.data
 from text_handler import load_and_tokenize, split_input_into_sentences
 import multiprocessing
 import json
+import time
 import os
 import pickle
 import itertools
@@ -68,13 +69,13 @@ def get_cl_args():
                        help='minibatch size')
     parser.add_argument('--sample_every', type=int, default=200,
                        help='run sample every x epochs')
-    parser.add_argument('--num_epochs', type=int, default=1000,
+    parser.add_argument('--num_epochs', type=int, default=500,
                        help='number of epochs')
     parser.add_argument('--num_features', type=int, default=50,
                        help='number of features in w2v model')
-    parser.add_argument('--learning_rate', type=float, default=0.0001,
+    parser.add_argument('--learning_rate', type=float, default=0.5,
                        help='learning rate')
-    parser.add_argument('--epsilon_std', type=float, default=0.8,
+    parser.add_argument('--epsilon_std', type=float, default=1.0,
                        help='epsilon std')
     args = parser.parse_args()
     return vars(args)
@@ -382,8 +383,10 @@ def shortest_homology(point_one, point_two, num):
     return hom_sample
 
 def sample(train, test, args, word2vec, encoder, generator):
-    sep = ""
+    sep = " "
     decode_sep = "\n"
+    raw_data = load_json(args["raw_data_file"])
+    original_data = raw_data[0].split(" ")
     if args["tokenize"] == "chars":
         sep = ""
         decode_sep = " "
@@ -394,32 +397,27 @@ def sample(train, test, args, word2vec, encoder, generator):
     sent_decoded = generator.predict(sent_encoded)
     print("Obtained " + str(len(sent_decoded)) + " items.")
     print("Decoded length: " + str(len(sent_decoded[0])))
-    output = ""
+    output = []
     print("Decoding all outputs.")
     for x in range(len(sent_decoded)):
-        output += (sep.join(decode_sentence(sent_decoded[x], args, word2vec)))
-        output += decode_sep
-    print output
-
-    if args["mode"] != "train":
-
-# The encoder trained above embeds sentences (concatenated word vetors) into a lower dimensional space. The code below takes two of these lower dimensional sentence representations and finds five points between them. It then uses the trained decoder to project these five points into the higher, original, dimensional space. Finally, it reveals the text represented by the five generated sentence vectors by taking each word vector concatenated inside and finding the text associated with it in the word2vec used during preprocessing.
-
-        print("Running shortest homology test 1")
-        test_hom = shortest_homology(sent_encoded[3], sent_encoded[10], 5)
-        for point in test_hom:
-            p = generator.predict(np.array([point]))[0]
-            print(sep.join(decode_sentence(p, args, word2vec)))
-
-# The code below does the same thing, with one important difference. After sampling equidistant points in the latent space between two sentence embeddings, it finds the embeddings from our encoded dataset those points are most similar to. It then prints the text associated with those vectors.
-#   
-# This allows us to explore how the Variational Autoencoder clusters our dataset of sentences in latent space. It lets us investigate whether sentences with similar concepts or grammatical styles are represented in similar areas of the lower dimensional space.
-
-        print("Running shortest homology test 2")
-        test_hom = shortest_homology(sent_encoded[2], sent_encoded[15], 20)
-        for point in test_hom:
-            p = generator.predict(np.array([find_similar_encoding(point, sent_encoded)]))[0]
-            print(sep.join(decode_sentence(p, args, word2vec)))
+        output.append(sep.join(decode_sentence(sent_decoded[x], args, word2vec)))
+    print decode_sep.join(output)
+    timestamp = int(time.time())
+    filename = os.path.join(save_dir, "output_" + str(timestamp) + ".json")
+    save_json(output, filename)
+    if args["tokenize"] == "chars":
+        matches = 0
+        duplicates = []
+        dup_count = 0
+        for o in output:
+            if o not in duplicates:
+                duplicates.append(0)
+            else:
+                dup_count += 1
+            if o in original_data:
+                matches += 1
+        print("Found " + str(matches) + " matches between output and original data")
+        print("Found " + str(dup_count) + " duplicates in output data")
 
 #########################################################
 # Entry point
@@ -448,12 +446,13 @@ if __name__ == '__main__':
     args["original_dim"] = original_dim = len(train[0])
     epochs = args["num_epochs"]
     if args["tokenize"] == "chars":
-        epochs = epochs * 100
+        epochs = epochs * 10
 
     input_size = args["input_size"]
     intermediate_dim = int(original_dim / 3)
     latent_dim = int(intermediate_dim * 1.2)
     epsilon_std = args["epsilon_std"]
+    lr = args["learning_rate"]
 
     x = Input(batch_shape=(input_size, original_dim))
     h = Dense(intermediate_dim, activation='relu')(x)
@@ -482,7 +481,7 @@ if __name__ == '__main__':
 
         def vae_loss(self, x, x_decoded_mean):
             xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
-            kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+            kl_loss = - lr * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
             return K.mean(xent_loss + kl_loss)
 
         def call(self, inputs):
