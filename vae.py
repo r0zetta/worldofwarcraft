@@ -3,8 +3,6 @@ from keras.callbacks import ModelCheckpoint
 from keras.models import Model
 from keras import backend as K
 from keras import metrics
-from nltk import pos_tag
-import nltk.data
 from text_handler import split_input_into_sentences, split_line_into_chars, split_line_into_words
 import multiprocessing
 import json
@@ -16,15 +14,9 @@ import argparse
 import sys
 import random
 import numpy as np
-from scipy import spatial
-from scipy.stats import norm
 import gensim.models.word2vec as w2v
 
 save_dir = "vae_save"
-char_input_size = 1000
-word_input_size = 50
-chars_num_features = 50
-words_num_features = 50
 
 def save_json(variable, filename):
     with open(filename, "w") as f:
@@ -64,26 +56,6 @@ def get_cl_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='train',
                        help='train or sample')
-    parser.add_argument('--tokenize', type=str, default='words',
-                       help='tokenize by words or chars')
-    parser.add_argument('--intermediate_activator', type=str, default='relu',
-                       help='activation type (relu, sigmoid, tanh)')
-    parser.add_argument('--optimizer', type=str, default='adam',
-                       help='optimizer (rmsprop, adam, etc.)')
-    parser.add_argument('-n', type=int, default=1,
-                       help='The number of sentences to generate')
-    parser.add_argument('--learning_rate', type=float, default=0.0005,
-                       help='learning rate')
-    parser.add_argument('--verbosity', type=int, default=1,
-                       help='keras fit function verbosity')
-    parser.add_argument('--sample_every', type=int, default=20,
-                       help='run sample every x epochs')
-    parser.add_argument('--num_epochs', type=int, default=3000,
-                       help='number of epochs')
-    parser.add_argument('--magic', type=float, default=0.003,
-                       help='magic number')
-    parser.add_argument('--epsilon_std', type=float, default=1.0,
-                       help='epsilon std')
     args = parser.parse_args()
     return vars(args)
 
@@ -96,11 +68,9 @@ def get_args():
     else:
         args = cl_args
     args["mode"] = cl_args["mode"]
-    args["n"] = cl_args["n"]
     print("Args:")
     for key, value in sorted(args.iteritems()):
         print("\t" + str(key) + ":\t" + str(value))
-    save_args(args)
     return args
 
 def create_w2v_model(args, sentences):
@@ -162,13 +132,11 @@ def split_words_into_chars(words):
 
 def split_and_pad_input(input_data, args):
     items = []
-    input_size = 0
+    input_size = args["input_size"]
     if args["tokenize"] == "words":
         items = split_input_into_sentences(input_data)
-        input_size = word_input_size
     else:
         items = split_words_into_chars(input_data)
-        input_size = char_input_size
     max_elements = len(items)
     while max_elements % input_size != 0:
         max_elements -= 1
@@ -377,11 +345,28 @@ if __name__ == '__main__':
     random.seed(1)
     args["tokenize"] = choose_tokenize_mode(args)
     print("Tokenize mode: " + args["tokenize"])
-    input_size = word_input_size
-    args["num_features"] = words_num_features
+
     if args["tokenize"] == "chars":
-        args["num_features"] = chars_num_features
-        input_size = char_input_size
+        args["input_size"] = 1000
+        args["num_features"] = 50
+        args["intermediate_activator"] = "relu"
+        args["magic"] = 0.005
+        args["optimizer"] = "adam"
+        args["verbosity"] = 0
+        args["num_epochs"] = 3000
+        args["sample_every"] = 200
+        args["epsilon_std"] = 1.0
+    else:
+        args["input_size"] = 100
+        args["num_features"] = 50
+        args["intermediate_activator"] = "tanh"
+        args["magic"] = 0.9
+        args["optimizer"] = "rmsprop"
+        args["verbosity"] = 1
+        args["num_epochs"] = 300
+        args["sample_every"] = 3
+        args["epsilon_std"] = 1.0
+
     train, word2vec, features, tokens = prepare_data(args)
     print
     print("Testing decoder")
@@ -389,17 +374,15 @@ if __name__ == '__main__':
     print
 
     args["original_dim"] = original_dim = len(train[0])
+    input_size = args["input_size"]
     epochs = args["num_epochs"]
     epochs_per_iter = args["sample_every"]
-
-    args["input_size"] = input_size
     intermediate_dim = int(original_dim / 3)
     latent_dim = int(intermediate_dim * 1.2)
     epsilon_std = args["epsilon_std"]
     magic = args["magic"]
     intermediate_activator = args["intermediate_activator"]
     optimizer = args["optimizer"]
-    learning_rate = args["learning_rate"]
     verbosity = args["verbosity"]
     save_args(args)
 
@@ -416,7 +399,6 @@ if __name__ == '__main__':
     print("Latent dim: " + str(latent_dim))
     print("epsilon_std: " + str(epsilon_std))
     print("magic: " + str(magic))
-    print("learning rate: " + str(learning_rate))
     print("intermediate_activator: " + str(intermediate_activator))
     print("optimizer: " + str(optimizer))
     print("epochs: " + str(epochs))
