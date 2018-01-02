@@ -5,7 +5,7 @@ from keras import backend as K
 from keras import metrics
 from nltk import pos_tag
 import nltk.data
-from text_handler import split_input_into_sentences
+from text_handler import split_input_into_sentences, split_line_into_chars, split_line_into_words
 import multiprocessing
 import json
 import time
@@ -22,7 +22,9 @@ import gensim.models.word2vec as w2v
 
 save_dir = "vae_save"
 char_input_size = 1000
-word_input_size = 100
+word_input_size = 50
+chars_num_features = 50
+words_num_features = 50
 
 def save_json(variable, filename):
     with open(filename, "w") as f:
@@ -34,7 +36,6 @@ def load_json(filename):
         try:
             with open(filename, "r") as f:
                 ret = json.load(f)
-            print("Loaded data from " + filename + ".")
         except:
             print("Couldn't load " + filename + ".")
     else:
@@ -79,8 +80,6 @@ def get_cl_args():
                        help='run sample every x epochs')
     parser.add_argument('--num_epochs', type=int, default=3000,
                        help='number of epochs')
-    parser.add_argument('--num_features', type=int, default=50,
-                       help='number of features in w2v model')
     parser.add_argument('--magic', type=float, default=0.003,
                        help='magic number')
     parser.add_argument('--epsilon_std', type=float, default=1.0,
@@ -135,6 +134,17 @@ def create_w2v_model(args, sentences):
     print("Word2Vec vocabulary length:", len(word_vectors.wv.vocab))
     print("Training...")
     word_vectors.train(sentences, total_examples=sentence_count, epochs=epoch_count)
+    all_word_vectors_matrix = word_vectors.wv.syn0
+    num_words = len(all_word_vectors_matrix)
+    print("Number of word vectors: " + str(num_words))
+
+    vocab = word_vectors.wv.vocab
+    print("Vocab length: " + str(len(vocab)))
+    voc = []
+    for v in vocab:
+        voc.append(v)
+    vocab_filename = os.path.join(save_dir, "vocab.json")
+    save_json(voc, vocab_filename)
 
     print("Saving model...")
     model_filename = os.path.join(save_dir, "word_vectors.w2v")
@@ -144,7 +154,6 @@ def create_w2v_model(args, sentences):
 def split_words_into_chars(words):
     ret = []
     for word in words:
-        print word
         entry = []
         for c in list(word):
             entry.append(c)
@@ -188,7 +197,7 @@ def vectorize_data(args, tokenized_data, word2vec):
     print("Number of features: " + str(dim0))
 
     max_name_len = len(max(tokenized_data, key=len))
-    print("Maximum name length: " + str(max_name_len))
+    print("Maximum element length: " + str(max_name_len))
 
     batch_len = max_name_len * dim0
     print("Batch length: " + str(batch_len))
@@ -252,14 +261,6 @@ def prepare_data(args):
         print("Loaded tokenized data from file.")
 
     word2vec = create_w2v_model(args, tokenized_data)
-    all_word_vectors_matrix = word2vec.wv.syn0
-    num_words = len(all_word_vectors_matrix)
-    print("Number of word vectors: " + str(num_words))
-
-    vocab = word2vec.wv.vocab
-    print("Vocab length: " + str(len(vocab)))
-    dim = word2vec.wv[""].shape
-    print("Dim: " + str(dim))
     dim0 = word2vec.wv[""].shape[0]
     print("Features per word: " + str(dim0))
 
@@ -269,9 +270,16 @@ def prepare_data(args):
 
     return data_array, word2vec, dim0, tokenized_data
 
-def encode_sentence(sentence, args, word2vec):
+def encode_sentence(input_data, args, word2vec):
     tokenized = []
-    for c in list(sentence):
+    to_convert = []
+    filename = os.path.join(save_dir, "vocab.json")
+    vocab = load_json(filename)
+    if args["tokenize"] == "words":
+        to_convert, lost = split_line_into_words(input_data)
+    else:
+        to_convert = split_line_into_chars(input_data)
+    for c in to_convert:
         try:
             vecs = word2vec.wv[c]
             for v in vecs:
@@ -288,6 +296,8 @@ def decode_sentence(vectors, args, word2vec):
     num_words = vector_count/features
     #print("Decoding " + str(num_words) + " items")
     decoded_words = []
+    filename = os.path.join(save_dir, "vocab.json")
+    vocab = load_json(filename)
     for x in range(num_words):
         start_pos = x * features
         word_as_vectors = vectors[start_pos: start_pos + features]
@@ -298,6 +308,9 @@ def decode_sentence(vectors, args, word2vec):
             print("Vector was empty. WTF???!??!?")
         topn = 1;
         word = word2vec.most_similar( [ model_word_vector ], [], topn)
+        if word[0][0] not in vocab:
+            print word
+            assert False
         decoded_words.append(word[0][0])
     return decoded_words
 
@@ -311,7 +324,7 @@ def test_decoder(args, word2vec):
         encoded = encode_sentence(orig_item, args, word2vec)
         decoded = decode_sentence(encoded, args, word2vec)
         decoded_item = "".join(decoded)
-        print(orig_item + " = " + decoded_item)
+        print("[" + orig_item + "] = [" + decoded_item + "]")
 
 def sample(train, args, word2vec, encoder, generator):
     sep = " "
@@ -364,8 +377,12 @@ if __name__ == '__main__':
     random.seed(1)
     args["tokenize"] = choose_tokenize_mode(args)
     print("Tokenize mode: " + args["tokenize"])
+    input_size = word_input_size
+    args["num_features"] = words_num_features
+    if args["tokenize"] == "chars":
+        args["num_features"] = chars_num_features
+        input_size = char_input_size
     train, word2vec, features, tokens = prepare_data(args)
-    args["num_features"] = features
     print
     print("Testing decoder")
     test_decoder(args, word2vec)
@@ -374,9 +391,6 @@ if __name__ == '__main__':
     args["original_dim"] = original_dim = len(train[0])
     epochs = args["num_epochs"]
     epochs_per_iter = args["sample_every"]
-    input_size = word_input_size
-    if args["tokenize"] == "chars":
-        input_size = char_input_size
 
     args["input_size"] = input_size
     intermediate_dim = int(original_dim / 3)

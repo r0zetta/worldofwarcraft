@@ -1,8 +1,4 @@
-from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
 import numpy as np
 import argparse
@@ -10,10 +6,7 @@ import pickle
 import os
 import sys
 import io
-import nltk
 import json
-
-stopwords = ""
 
 def print_progress():
     sys.stdout.write("#")
@@ -30,35 +23,18 @@ def load_data(input_file):
             raw_data = json.load(f)
     return raw_data
 
-def split_into_sentences(raw_data):
-    nltk.download("punkt")
-    nltk.download("stopwords")
-    tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
-    print("Splitting raw data into sentences.")
-    raw_sentences = tokenizer.tokenize(raw_data)
-    num_raw_sentences = len(raw_sentences)
-    print("Raw sentence count: " + str(num_raw_sentences))
-    return raw_sentences
-
 def predict_val(sentence, vectorizer, model):
     Y = vectorizer.transform([sentence])
     prediction = model.predict(Y)
     return int(prediction[0])
 
-def get_vocab(documents):
-    print("Getting vocab.")
-    vectorizer = CountVectorizer(lowercase=False)
-    vectorizer.fit(documents)
-    vocab = vectorizer.vocabulary_
-    words = list(vocab.keys())
-    return words
+# XXX implement
+def preprocess(data_set):
+    return data_set
 
 def vectorize(documents):
     print("Vectorizing with tf-idf")
-    if stopwords != "":
-        vectorizer = TfidfVectorizer(stop_words=stop_words, lowercase=False)
-    else:
-        vectorizer = TfidfVectorizer(lowercase=False)
+    vectorizer = TfidfVectorizer(lowercase=False)
     vectors = vectorizer.fit_transform(documents)
     vocab = vectorizer.vocabulary_
     words = list(vocab.keys())
@@ -130,6 +106,7 @@ def run_predictions(prefix, vectorizer, model, data_set):
     return predictions, counts
 
 def analyze(prefix, data_set, k):
+    data_set = preprocess(data_set)
     X, v = vectorize(data_set)
     m = cluster(prefix, X, v, k)
     p, c = run_predictions(prefix, v, m, data_set)
@@ -194,13 +171,8 @@ if __name__ == '__main__':
     if not os.path.exists(cluster_dir):
         os.makedirs(cluster_dir)
     use_dim_reduction = False
-    split_into_sentences = False
-    json_data = load_data("data/data.json")
-    documents = []
-    if split_into_sentences == True:
-        documents = split_into_sentences("\n".join(json_data))
-    else:
-        documents = json_data
+    json_data = load_data("k_means_data/data.json")
+    documents = json_data
 
 # Perhaps run this in a loop, optimizing num_k
     num_samples = len(documents)

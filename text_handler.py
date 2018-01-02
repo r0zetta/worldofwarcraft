@@ -54,7 +54,7 @@ def process_punctuation(words):
             m = re.search("^(\w+)[\,\-\.\>\<]{2,}(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
-                ret.append(" ")
+                ret.append(u" ")
                 ret.append(m.group(2))
                 changed = True
         # Handle no space after full stop or comma
@@ -63,7 +63,7 @@ def process_punctuation(words):
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
-                ret.append(" ")
+                ret.append(u" ")
                 ret.append(m.group(3))
                 changed = True
         # Handle multiple - , and . at end of word
@@ -84,9 +84,9 @@ def process_punctuation(words):
             m = re.search("^(\w+)([\/\+\>\<])(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
-                ret.append(" ")
+                ret.append(u" ")
                 ret.append(m.group(2))
-                ret.append(" ")
+                ret.append(u" ")
                 ret.append(m.group(3))
                 changed = True
         if changed == False:
@@ -94,14 +94,14 @@ def process_punctuation(words):
             if m is not None:
                 ret.append(m.group(1))
                 ret.append(m.group(2))
-                ret.append(" ")
+                ret.append(u" ")
                 ret.append(m.group(3))
                 changed = True
         if changed == False:
             m = re.search("^(\w+)([\(])(\w+)$", word)
             if m is not None:
                 ret.append(m.group(1))
-                ret.append(" ")
+                ret.append(u" ")
                 ret.append(m.group(2))
                 ret.append(m.group(3))
                 changed = True
@@ -145,7 +145,7 @@ def process_word(word):
     start_len = len(word)
     orig_word = word
     if word.isspace():
-        return [" "]
+        return [u" "]
     word = word.strip()
     if word.startswith("http"):
         return [""]
