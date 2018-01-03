@@ -196,182 +196,6 @@ def prepare_data():
 
     return tokens, cleaned
 
-def get_word_frequencies(corpus):
-    print("Calculating word frequencies.")
-    frequencies = Counter()
-    for sent in corpus:
-        for word in sent:
-            frequencies[word] += 1
-    freq = frequencies.most_common()
-    return freq
-
-
-def get_word2vec(sentences):
-    num_workers = multiprocessing.cpu_count()
-    num_features = 500
-    epoch_count = 100
-    sentence_count = len(sentences)
-    w2v_file = os.path.join(save_dir, "word_vectors.w2v")
-    word2vec = None
-    if os.path.exists(w2v_file):
-        print("w2v model loaded from " + w2v_file)
-        word2vec = w2v.Word2Vec.load(w2v_file)
-    else:
-        word2vec = w2v.Word2Vec(sg=1,
-                                seed=1,
-                                workers=num_workers,
-                                size=num_features,
-                                min_count=3,
-                                window=7,
-                                sample=0.0001)
-
-        print("Building vocab...")
-        word2vec.build_vocab(sentences)
-        print("Word2Vec vocabulary length:", len(word2vec.wv.vocab))
-        print("Training...")
-        word2vec.train(sentences, total_examples=sentence_count, epochs=epoch_count)
-        print("Saving model...")
-        word2vec.save(w2v_file)
-    return word2vec
-
-def most_similar(input_word, word2vec):
-    sim = word2vec.wv.most_similar(input_word, topn=num_similar)
-    output = []
-    found = []
-    for item in sim:
-        w, n = item
-        found.append(w)
-    output = [input_word, found]
-    t_sne_scatterplot(input_word, word2vec)
-    return output
-
-def nearest_similarity_cosmul(start1, end1, end2, word2vec):
-    similarities = word2vec.wv.most_similar_cosmul(
-        positive=[end2, start1],
-        negative=[end1]
-    )
-    start2 = similarities[0][0]
-    print("{start1} is related to {end1}, as {start2} is related to {end2}".format(**locals()))
-    return start2
-
-def plot_all(word2vec, clusters):
-    vocab = word2vec.wv.vocab.keys()
-    vocab_len = len(vocab)
-    prog = vocab_len/50
-    labels = []
-    xkcd_colors = load_json("xkcd_color_names.json")
-    arr = np.empty((0, dim0), dtype='f')
-    labels = []
-    vectors_file = os.path.join(save_dir, "vocab_vectors.npy")
-    labels_file = os.path.join(save_dir, "labels.json")
-    if os.path.exists(vectors_file) and os.path.exists(labels_file):
-        print("Loading pre-saved vectors from disk")
-        arr = load_bin(vectors_file)
-        labels = load_json(labels_file)
-    else:
-        print("Creating an array of vectors for each word in the vocab")
-        count = 0
-        for cluster in clusters:
-            for word in cluster:
-                if count % prog == 0:
-                    print_progress()
-                w_vec = word2vec[word]
-                labels.append(word)
-                arr = np.append(arr, np.array([w_vec]), axis=0)
-                count += 1
-        save_bin(arr, vectors_file)
-        save_json(labels, labels_file)
-    x_c_filename = os.path.join(save_dir, "x_coords.npy")
-    y_c_filename = os.path.join(save_dir, "y_coords.npy")
-    x_coords = None
-    y_coords = None
-    if os.path.exists(x_c_filename) and os.path.exists(y_c_filename):
-        print("Reading pre-calculated coords from disk")
-        x_coords = load_bin(x_c_filename)
-        y_coords = load_bin(y_c_filename)
-    else:
-        print("Computing T-SNE for array of length: " + str(len(arr)))
-        tsne = TSNE(n_components=2, random_state=1, verbose=1)
-        np.set_printoptions(suppress=True)
-        Y = tsne.fit_transform(arr)
-        x_coords = Y[:, 0]
-        y_coords = Y[:, 1]
-        print("Saving calculated coords")
-        save_bin(x_coords, x_c_filename)
-        save_bin(y_coords, y_c_filename)
-    index = 0
-    for count, cluster in enumerate(clusters):
-        clen = len(cluster)
-        if clen > 0:
-            color = xkcd_colors[random.randint(0, len(xkcd_colors)-1)]
-            print("Cluster: " + str(count) + " items: " + str(clen) + " color: " + color)
-            xc = x_coords[index:index+clen]
-            yc = y_coords[index:index+clen]
-            plt.scatter(xc, yc, marker=".", c=color)
-        else:
-            print("Empty cluster")
-            print cluster
-        index += clen
-
-    plt.xlim(x_coords.min()+0.005, x_coords.max()+0.005)
-    plt.ylim(y_coords.min()+0.005, y_coords.max()+0.005)
-    plot_dir = os.path.join(save_dir, "plots")
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
-    filename = os.path.join(save_dir, "all_vectors_tsne.png")
-    plt.savefig(filename)
-    plt.close()
-
-
-def t_sne_scatterplot(word, word2vec):
-    vocab = word2vec.wv.vocab.keys()
-    vocab_len = len(vocab)
-    dim0 = word2vec.wv[vocab[0]].shape[0]
-
-    arr = np.empty((0, dim0), dtype='f')
-    w_labels = [word]
-    nearby = word2vec.wv.similar_by_word(word, topn=num_similar)
-    arr = np.append(arr, np.array([word2vec[word]]), axis=0)
-    for score in nearby:
-        w_vec = word2vec[score[0]]
-        w_labels.append(score[0])
-        arr = np.append(arr, np.array([w_vec]), axis=0)
-
-    tsne = TSNE(n_components=2, random_state=0)
-    np.set_printoptions(suppress=True)
-    Y = tsne.fit_transform(arr)
-
-    x_coords = Y[:, 0]
-    y_coords = Y[:, 1]
-    plt.scatter(x_coords, y_coords, marker=".")
-
-    for label, x, y in zip(w_labels, x_coords, y_coords):
-        plt.annotate(label, xy=(x, y), xytext=(0, 0), textcoords='offset points')
-    plt.xlim(x_coords.min()+0.0005, x_coords.max()+0.0005)
-    plt.ylim(y_coords.min()+0.0005, y_coords.max()+0.0005)
-    plot_dir = os.path.join(save_dir, "plots")
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
-    filename = os.path.join(plot_dir, word + "_tsne.png")
-    plt.savefig(filename)
-    plt.close()
-
-def test_word2vec(word2vec):
-    test_words = ["mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "good", "reroll", "quit", "lol"]
-    vocab = word2vec.wv.vocab.keys()
-    vocab_len = len(vocab)
-    output = []
-    print("Testing known words")
-    for word in test_words:
-        if word in vocab:
-            output.append(most_similar(word, word2vec))
-    print("Testing random words")
-    for _ in range(10):
-        word = vocab[random.randint(0, vocab_len-1)]
-        output.append(most_similar(word, word2vec))
-    filename = os.path.join(save_dir, "word2vec_test.json")
-    save_json(output, filename)
-
 def LDA(cleaned):
     model_save_name = os.path.join(save_dir, "lda_model.sav")
     lda = None
@@ -427,8 +251,6 @@ def LDA(cleaned):
     with open(topics_save_name, "w") as f:
         json.dump(topics_matrix, f, indent=4)
 
-
-
 def k_means_cluster(word2vec, num_clusters):
     word_vectors = word2vec.wv.syn0
     print("Number of word vectors: " + str(len(word_vectors)))
@@ -456,6 +278,221 @@ def k_means_cluster(word2vec, num_clusters):
     filename = os.path.join(save_dir, "clusters.json")
     save_json(words, filename)
     return words
+
+def get_word_frequencies(corpus):
+    print("Calculating word frequencies.")
+    frequencies = Counter()
+    for sent in corpus:
+        for word in sent:
+            frequencies[word] += 1
+    freq = frequencies.most_common()
+    return freq
+
+def get_word2vec(sentences):
+    num_workers = multiprocessing.cpu_count()
+    num_features = 500
+    epoch_count = 100
+    sentence_count = len(sentences)
+    w2v_file = os.path.join(save_dir, "word_vectors.w2v")
+    word2vec = None
+    if os.path.exists(w2v_file):
+        print("w2v model loaded from " + w2v_file)
+        word2vec = w2v.Word2Vec.load(w2v_file)
+    else:
+        word2vec = w2v.Word2Vec(sg=1,
+                                seed=1,
+                                workers=num_workers,
+                                size=num_features,
+                                min_count=3,
+                                window=7,
+                                sample=0.0001)
+
+        print("Building vocab...")
+        word2vec.build_vocab(sentences)
+        print("Word2Vec vocabulary length:", len(word2vec.wv.vocab))
+        print("Training...")
+        word2vec.train(sentences, total_examples=sentence_count, epochs=epoch_count)
+        print("Saving model...")
+        word2vec.save(w2v_file)
+    return word2vec
+
+def most_similar(input_word, word2vec):
+    sim = word2vec.wv.most_similar(input_word, topn=num_similar)
+    output = []
+    found = []
+    for item in sim:
+        w, n = item
+        found.append(w)
+    output = [input_word, found]
+    t_sne_scatterplot(input_word, word2vec)
+    return output
+
+def nearest_similarity_cosmul(start1, end1, end2, word2vec):
+    similarities = word2vec.wv.most_similar_cosmul(
+        positive=[end2, start1],
+        negative=[end1]
+    )
+    start2 = similarities[0][0]
+    print("{start1} is related to {end1}, as {start2} is related to {end2}".format(**locals()))
+    return start2
+
+def test_word2vec(word2vec):
+    test_words = ["mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol"]
+    vocab = word2vec.wv.vocab.keys()
+    vocab_len = len(vocab)
+    output = []
+    print("Testing known words")
+    for word in test_words:
+        if word in vocab:
+            print("Testing " + word)
+            output.append(most_similar(word, word2vec))
+        else:
+            print("Word " + word + " not in vocab")
+    """
+    print("Testing random words")
+    for _ in range(10):
+        word = vocab[random.randint(0, vocab_len-1)]
+        print("Testing " + word)
+        output.append([word, most_similar(word, word2vec)])
+    """
+    filename = os.path.join(save_dir, "word2vec_test.json")
+    save_json(output, filename)
+    return output
+
+def show_cluster_locations(results, labels, x_coords, y_coords):
+    big_plot_dir = os.path.join(save_dir, "big_plots")
+    if not os.path.exists(big_plot_dir):
+        os.makedirs(big_plot_dir)
+    for item in results:
+        name = item[0]
+        print("Plotting big graph for " + name)
+        filename = os.path.join(big_plot_dir, name + "_tsne.png")
+        similar = item[1]
+        in_set_x = []
+        in_set_y = []
+        out_set_x = []
+        out_set_y = []
+        for count, word in enumerate(labels):
+            xc = x_coords[count]
+            yc = y_coords[count]
+            if word in similar:
+                in_set_x.append(xc)
+                in_set_y.append(yc)
+            else:
+                out_set_x.append(xc)
+                out_set_y.append(yc)
+        plt.figure(figsize=(16, 12), dpi=80)
+        plt.scatter(in_set_x, in_set_y, s=80, marker="o", c="red")
+        plt.scatter(out_set_x, out_set_y, s=8, marker=".", c="black")
+        plt.savefig(filename)
+        plt.close()
+
+
+def plot_all(word2vec, clusters):
+    vocab = word2vec.wv.vocab.keys()
+    vocab_len = len(vocab)
+    prog = vocab_len/50
+    labels = []
+    xkcd_colors = load_json("xkcd_color_names.json")
+    arr = np.empty((0, dim0), dtype='f')
+    labels = []
+    vectors_file = os.path.join(save_dir, "vocab_vectors.npy")
+    labels_file = os.path.join(save_dir, "labels.json")
+    if os.path.exists(vectors_file) and os.path.exists(labels_file):
+        print("Loading pre-saved vectors from disk")
+        arr = load_bin(vectors_file)
+        labels = load_json(labels_file)
+    else:
+        print("Creating an array of vectors for each word in the vocab")
+        count = 0
+        for cluster in clusters:
+            for word in cluster:
+                if count % prog == 0:
+                    print_progress()
+                w_vec = word2vec[word]
+                labels.append(word)
+                arr = np.append(arr, np.array([w_vec]), axis=0)
+                count += 1
+        save_bin(arr, vectors_file)
+        save_json(labels, labels_file)
+    x_c_filename = os.path.join(save_dir, "x_coords.npy")
+    y_c_filename = os.path.join(save_dir, "y_coords.npy")
+    x_coords = None
+    y_coords = None
+    if os.path.exists(x_c_filename) and os.path.exists(y_c_filename):
+        print("Reading pre-calculated coords from disk")
+        x_coords = load_bin(x_c_filename)
+        y_coords = load_bin(y_c_filename)
+    else:
+        print("Computing T-SNE for array of length: " + str(len(arr)))
+        tsne = TSNE(n_components=2, random_state=1, verbose=1)
+        np.set_printoptions(suppress=True)
+        Y = tsne.fit_transform(arr)
+        x_coords = Y[:, 0]
+        y_coords = Y[:, 1]
+        print("Saving calculated coords")
+        save_bin(x_coords, x_c_filename)
+        save_bin(y_coords, y_c_filename)
+    index = 0
+    plt.figure(figsize=(16, 12), dpi=80, facecolor='b', edgecolor='r')
+    for count, cluster in enumerate(clusters):
+        clen = len(cluster)
+        if clen > 0:
+            color = xkcd_colors[random.randint(0, len(xkcd_colors)-1)]
+            print("Cluster: " + str(count) + " items: " + str(clen) + " color: " + color)
+            xc = x_coords[index:index+clen]
+            yc = y_coords[index:index+clen]
+            plt.scatter(xc, yc, s=8, marker="o", c=color)
+        else:
+            print("Empty cluster")
+            print cluster
+        index += clen
+
+    plot_dir = os.path.join(save_dir, "plots")
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+    filename = os.path.join(save_dir, "all_vectors_tsne.png")
+    plt.savefig(filename)
+    plt.close()
+    return labels, x_coords, y_coords
+
+def t_sne_scatterplot(word, word2vec):
+    vocab = word2vec.wv.vocab.keys()
+    vocab_len = len(vocab)
+    dim0 = word2vec.wv[vocab[0]].shape[0]
+
+    arr = np.empty((0, dim0), dtype='f')
+    w_labels = [word]
+    nearby = word2vec.wv.similar_by_word(word, topn=num_similar)
+    arr = np.append(arr, np.array([word2vec[word]]), axis=0)
+    for score in nearby:
+        w_vec = word2vec[score[0]]
+        w_labels.append(score[0])
+        arr = np.append(arr, np.array([w_vec]), axis=0)
+
+    tsne = TSNE(n_components=2, random_state=0)
+    np.set_printoptions(suppress=True)
+    Y = tsne.fit_transform(arr)
+
+    x_coords = Y[:, 0]
+    y_coords = Y[:, 1]
+    plt.rc("font", size=16)
+    plt.figure(figsize=(16, 12), dpi=80)
+    plt.scatter(x_coords[0], y_coords[0], s=800, marker="o", color="blue")
+    plt.scatter(x_coords[1:], y_coords[1:], s=200, marker="o", color="red")
+
+    for label, x, y in zip(w_labels, x_coords, y_coords):
+        plt.annotate(label.upper(), xy=(x, y), xytext=(0, 0), textcoords='offset points')
+    plt.xlim(x_coords.min()-50, x_coords.max()+50)
+    plt.ylim(y_coords.min()-50, y_coords.max()+50)
+    plot_dir = os.path.join(save_dir, "plots")
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+    filename = os.path.join(plot_dir, word + "_tsne.png")
+    plt.savefig(filename)
+    plt.close()
+
+
 
 
 
@@ -494,20 +531,27 @@ if __name__ == '__main__':
     print("word2vec vocab contains " + str(vocab_len) + " items.")
     dim0 = word2vec.wv[vocab[0]].shape[0]
     print("word2vec items have " + str(dim0) + " features.")
-    print("Running tests")
-    #test_word2vec(word2vec)
-    filename = os.path.join(save_dir, "clusters.json")
-    clusters = load_json(filename)
-    print("Plotting full graph")
-    plot_all(word2vec, clusters)
-    sys.exit(0)
 
 #######################################
 # k-means clustering
 #######################################
     print
-    print("Clustering (k=" + str(num_clusters)+")")
-    clusters = k_means_cluster(word2vec, num_clusters)
+    clusters = None
+    filename = os.path.join(save_dir, "clusters.json")
+    if os.path.exists(filename):
+        clusters = load_json(filename)
+    else:
+        print("Clustering (k=" + str(num_clusters)+")")
+        clusters = k_means_cluster(word2vec, num_clusters)
+
+    print("Plotting full graph")
+    labels, x_coords, y_coords = plot_all(word2vec, clusters)
+
+    print("Running tests")
+    results = test_word2vec(word2vec)
+
+    print("Plotting test results on full cluster diagrams")
+    show_cluster_locations(results, labels, x_coords, y_coords)
 
     print
     print("Done")
