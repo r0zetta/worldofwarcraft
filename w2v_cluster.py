@@ -316,6 +316,34 @@ def get_word2vec(sentences):
         word2vec.save(w2v_file)
     return word2vec
 
+def most_similar_intersection(inputs, word2vec):
+    output = []
+    similar = {}
+    all_similar = []
+    for word in inputs:
+        sim = word2vec.wv.most_similar(word, topn=num_similar*5)
+        similar[word] = []
+        for item in sim:
+            w, n = item
+            similar[word].append(w)
+            if w not in all_similar:
+                all_similar.append(w)
+    subset = []
+    for word in all_similar:
+        is_subset = True
+        for label, items in similar.iteritems():
+            if word not in items:
+                is_subset = False
+        if is_subset == True:
+            subset.append(word)
+    if len(subset) > 0:
+        output.append(inputs)
+        output.append(subset)
+    if len(output) > 0:
+        return output
+    else:
+        return None
+
 def most_similar(input_word, word2vec):
     sim = word2vec.wv.most_similar(input_word, topn=num_similar)
     output = []
@@ -342,9 +370,9 @@ def test_word2vec(word2vec):
     vocab_len = len(vocab)
     output = []
     print("Testing known words")
-    for word in test_words:
+    for count, word in enumerate(test_words):
         if word in vocab:
-            print("Testing " + word)
+            print("[" + str(count+1) + "] Testing: " + word)
             output.append(most_similar(word, word2vec))
         else:
             print("Word " + word + " not in vocab")
@@ -356,6 +384,18 @@ def test_word2vec(word2vec):
         output.append([word, most_similar(word, word2vec)])
     """
     filename = os.path.join(save_dir, "word2vec_test.json")
+    save_json(output, filename)
+    return output
+
+def test_intersections(word2vec):
+    test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"]]
+    output = []
+    for count, group in enumerate(test_groups):
+        print("[" + str(count+1) + "] Testing intersection: " + str(group))
+        retval = most_similar_intersection(group, word2vec)
+        if retval is not None:
+            output.append(retval)
+    filename = os.path.join(save_dir, "word2vec_test_groups.json")
     save_json(output, filename)
     return output
 
@@ -537,6 +577,9 @@ if __name__ == '__main__':
     print("word2vec vocab contains " + str(vocab_len) + " items.")
     dim0 = word2vec.wv[vocab[0]].shape[0]
     print("word2vec items have " + str(dim0) + " features.")
+
+    print("Running intersection tests")
+    intersections = test_intersections(word2vec)
 
 #######################################
 # k-means clustering
