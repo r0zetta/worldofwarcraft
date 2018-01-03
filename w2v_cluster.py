@@ -321,7 +321,7 @@ def most_similar_intersection(inputs, word2vec):
     similar = {}
     all_similar = []
     for word in inputs:
-        sim = word2vec.wv.most_similar(word, topn=num_similar*5)
+        sim = word2vec.wv.most_similar(word, topn=int(num_similar * (len(inputs)*2.5)))
         similar[word] = []
         for item in sim:
             w, n = item
@@ -388,7 +388,7 @@ def test_word2vec(word2vec):
     return output
 
 def test_intersections(word2vec):
-    test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"]]
+    test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"], ["warrior", "mage", "priest"]]
     output = []
     for count, group in enumerate(test_groups):
         print("[" + str(count+1) + "] Testing intersection: " + str(group))
