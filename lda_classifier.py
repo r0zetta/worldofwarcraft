@@ -24,9 +24,12 @@ def filter_and_stem(tokens):
     return stems
 
 if __name__ == '__main__':
+    save_dir = "lda/"
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     input_file = "data/data.json"
-    tokens_file = "data/tokens.json"
-    sentences_file = "data/sentences.json"
+    tokens_file = os.path.join(save_dir, "tokens.json")
+    sentences_file = os.path.join(save_dir, "sentences.json")
     split_mode = "words"
     raw_data = []
     tokens = []
@@ -53,22 +56,33 @@ if __name__ == '__main__':
 
     print("Creating dictionary")
     dictionary = corpora.Dictionary(sentences)
-    #dictionary.filter_extremes(no_below=1, no_above=0.8)
 
-    print("Creating corpus")
-    corpus = [dictionary.doc2bow(tokens)]
-
-    print("Building model")
-    lda = models.LdaModel(corpus, num_topics=50, 
-                          id2word=dictionary, 
-                          update_every=5, 
-                          random_state=1,
-                          chunksize=10000, 
-                          passes=100)
+    model_save_name = os.path.join(save_dir, "lda_model.sav")
+    lda = None
+    if os.path.exists(model_save_name):
+        print("Loading model from disk")
+        lda = models.LdaModel.load(model_save_name)
+    else:
+        print("Creating corpus")
+        corpus = [dictionary.doc2bow(tokens)]
+        print("Building model")
+        lda = models.LdaModel(corpus, num_topics=50, 
+                              id2word=dictionary, 
+                              update_every=5, 
+                              random_state=1,
+                              chunksize=10000, 
+                              passes=100)
+        lda.save(model_save_name)
 
     topics_matrix = lda.show_topics(formatted=False, num_words=20)
-    topic_words = topics_matrix[:,:,1]
-    for w in topic_words:
-        print([str(word) for word in w])
-        print
-
+    topics_save_name = os.path.join(save_dir, "topics_matrix.json")
+    with open(topics_save_name, "w") as f:
+        json.dump(topics_matrix, f, indent=4)
+    sentence_map = {}
+    for s in sentences:
+        chunk = dictionary.doc2bow(s)
+        print chunk
+        sentence_map[s] = lda.get_document_topics(chunk)
+    sentence_map_save = os.path.join(save_dir, "sentence_map.json")
+    with open(sentence_map_save, "w") as f:
+        json.dump(topics_matrix, f, indent=4)

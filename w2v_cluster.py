@@ -1,8 +1,12 @@
+from gensim import corpora, models, similarities 
 import gensim.models.word2vec as w2v
 from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
 from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import sent_tokenize, word_tokenize
 from text_handler import split_line_into_words
+import numpy as np
+import matplotlib.pyplot as plt
 import re
 import logging
 import multiprocessing
@@ -98,24 +102,32 @@ def clean_sentences(tokens, stopwords, stemmer):
         count += 1
         cleaned = []
         for token in sentence:
-            if re.search("^\w+$", token):
-                token = token.lower()
-                stw = False
-                if stopwords is not None:
-                    for s in stopwords:
-                        if token == s:
-                            #print("Removed stopword " + token)
-                            stw = True
+            if len(token) > 0:
+                if re.search("^\w+$", token):
+                    token = token.lower()
+                    skip = False
+                    if skip == False:
+                        if stopwords is not None:
+                            for s in stopwords:
+                                if token == s:
+                                    #print("Removed stopword " + token)
+                                    skip = True
+                                    token = None
+                                    break
+                    if skip == False:
+                        if re.search("[0-9]+", token):
+                            skip = True
                             token = None
-                            break
-                if stw == False:
-                    stem = stemmer.stem(token)
-                    if stem is not None:
-                        #print("Stemmed " + token + " to " + stem)
-                        token = stem
-                if token is not None:
-                    cleaned.append(token)
-        ret.append(cleaned)
+                    if skip == False:
+                        stem = stemmer.stem(token)
+                        if stem is not None:
+                            #print("Stemmed " + token + " to " + stem)
+                            token = stem
+                    if skip == False:
+                        if token is not None:
+                            cleaned.append(token)
+        if len(cleaned) > 0:
+            ret.append(cleaned)
     return ret
 
 def load_raw_data(input_files):
@@ -126,15 +138,7 @@ def load_raw_data(input_files):
             ret += "\n".join(raw)
     return ret
 
-if __name__ == '__main__':
-    num_workers = multiprocessing.cpu_count()
-    num_features = 300
-    epoch_count = 10
-    num_clusters = 10
-
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
+def prepare_data():
     cleaned_file = os.path.join(save_dir, "cleaned.json")
     cleaned = load_json(cleaned_file)
     if cleaned is None:
@@ -163,16 +167,23 @@ if __name__ == '__main__':
         if stopwords is not None:
             stopwords_en = stopwords["en"]
         stemmer = SnowballStemmer("english")
-        cleaned = clean_sentences(tokens, stopwords_en, stemmer)
+        cleaned1 = clean_sentences(tokens, stopwords_en, stemmer)
+        cleaned = []
+        for sent in cleaned1:
+            if len(sent) > 0:
+                cleaned.append(sent)
+            else:
+                print("Found empty sentence. WTF??!?!?!")
         save_json(cleaned, cleaned_file)
+    return cleaned
 
-    sentence_count = len(cleaned)
-    print("Number of sentences: " + str(sentence_count))
-    token_count = sum([len(sentence) for sentence in cleaned])
-    print("The corpus contains " + str(token_count) + " tokens")
 
-    sentences = cleaned
 
+
+def get_word2vec(sentences):
+    num_workers = multiprocessing.cpu_count()
+    num_features = 500
+    epoch_count = 100
     w2v_file = os.path.join(save_dir, "word_vectors.w2v")
     word2vec = None
     if os.path.exists(w2v_file):
@@ -183,9 +194,9 @@ if __name__ == '__main__':
                                 seed=1,
                                 workers=num_workers,
                                 size=num_features,
-                                min_count=0,
+                                min_count=3,
                                 window=7,
-                                sample=0)
+                                sample=0.0001)
 
         print("Building vocab...")
         word2vec.build_vocab(sentences)
@@ -194,11 +205,136 @@ if __name__ == '__main__':
         word2vec.train(sentences, total_examples=sentence_count, epochs=epoch_count)
         print("Saving model...")
         word2vec.save(w2v_file)
+    return word2vec
 
-    print("Clustering (k=" + str(num_clusters)+")")
+def most_similar(input_word, word2vec):
+    input_word = input_word.lower
+    if input_word not in word2vec.wv.vocab:
+        print(input_word + " was not in the vocabulary.")
+        return
+    sim = word2vec.wv.most_similar(input_word)
+    found = []
+    for item in sim:
+        w, n = item
+        found.append(w)
+    print(input_word + ": " + ", ".join(found))
+    t_sne_scatterplot(word2vec, input_word)
+
+def nearest_similarity_cosmul(start1, end1, end2, word2vec):
+    similarities = word2vec.wv.most_similar_cosmul(
+        positive=[end2, start1],
+        negative=[end1]
+    )
+    start2 = similarities[0][0]
+    print("{start1} is related to {end1}, as {start2} is related to {end2}".format(**locals()))
+    return start2
+
+def t_sne_scatterplot(word2vec, word):
+    vocab = word_vectors.wv.vocab
+    vocab_len = len(vocab)
+    print("word2vec vocab contains " + str(vocab_len) + " items.")
+    dim0 = word2vec.wv[vocab[0]].shape[0]
+    print("word2vec items have " + str(dim0) + " features.")
+
+    word = word.lower()
+    if word not in vocab:
+        print("Queried word was not in vocab")
+        return
+
+    arr = np.empty((0, dim0), dtype='f')
+    w_labels = [word]
+    nearby = word2vec.similar_by_word(word)
+    arr = np.append(arr, np.array([word2vec[word]]), axis=0)
+    for score in nearby:
+        w_vec = word2vec[score[0]]
+        w_labels.append(score[0])
+        arr = np.append(arr, np.array([w_vec]), axis=0)
+
+    tsne = TSNE(n_components=2, random_state=0)
+    np.set_printoptions(suppress=True)
+    Y = tsne.fit_transform(arr)
+
+    x_coords = Y[:, 0]
+    y_coords = Y[:, 1]
+    plt.scatter(x_coords, y_coords)
+
+
+    for label, x, y in zip(w_labels, x_coords, y_coords):
+        plt.annotate(label, xy=(x, y), xytext=(0, 0), textcoords='offset points')
+    plt.xlim(x_coords.min()+0.00005, x_coords.max()+0.00005)
+    plt.ylim(y_coords.min()+0.00005, y_coords.max()+0.00005)
+    filename = os.path.join(save_dir, word + "_tsne.png")
+    plt.savefig(filename)
+
+def test_word2vec(word2vec):
+    print
+    most_similar("Mage", word2vec)
+    most_similar("Elf", word2vec)
+    most_similar("Void", word2vec)
+    print
+    most_similar("PVP", word2vec)
+    most_similar("gank", word2vec)
+    print
+    most_similar("PVE", word2vec)
+    most_similar("Raid", word2vec)
+    most_similar("raiding", word2vec)
+    most_similar("Nighthold", word2vec)
+    most_similar("Varimathras", word2vec)
+    print
+    most_similar("Alliance", word2vec)
+    most_similar("Horde", word2vec)
+    most_similar("evil", word2vec)
+    most_similar("good", word2vec)
+    print
+
+
+def LDA(tokens):
+    sentences = tokens
+    print("Creating dictionary")
+    dictionary = corpora.Dictionary(sentences)
+
+    model_save_name = os.path.join(save_dir, "lda_model.sav")
+    lda = None
+    if os.path.exists(model_save_name):
+        print("Loading model from disk")
+        lda = models.LdaModel.load(model_save_name)
+    else:
+        print("Creating corpus")
+        corpus = [dictionary.doc2bow(sentences)]
+        print("Building model")
+        lda = models.LdaModel(corpus, num_topics=50, 
+                              id2word=dictionary, 
+                              update_every=5, 
+                              random_state=1,
+                              chunksize=10000, 
+                              passes=100)
+        lda.save(model_save_name)
+
+    topics_matrix = lda.show_topics(formatted=False, num_words=20)
+    topics_save_name = os.path.join(save_dir, "topics_matrix.json")
+    with open(topics_save_name, "w") as f:
+        json.dump(topics_matrix, f, indent=4)
+    sentence_map = {}
+    for s in sentences:
+        chunk = dictionary.doc2bow(s)
+        print chunk
+        sentence_map[s] = lda.get_document_topics(chunk)
+    sentence_map_save = save_dir + "sentence_map.json"
+    with open(sentence_map_save, "w") as f:
+        json.dump(topics_matrix, f, indent=4)
+
+
+
+def k_means_cluster(word2vec, num_clusters):
     word_vectors = word2vec.wv.syn0
-    kmeans_clustering = KMeans(n_clusters = num_clusters)
-    idx = kmeans_clustering.fit_predict(word_vectors)
+    print("Number of word vectors: " + str(len(word_vectors)))
+    model = KMeans(n_clusters=num_clusters,
+                   init='k-means++',
+                   max_iter=100,
+                   n_init=1,
+                   random_state=1,
+                   verbose=1)
+    idx = model.fit_predict(word_vectors)
     word_centroid_map = dict(zip(word2vec.wv.index2word, idx ))
     max_i = len(word_centroid_map.values())
     progress_point = max_i / 50
@@ -215,5 +351,47 @@ if __name__ == '__main__':
         print("\nCluster " + str(cl) + " had " + str(len(cluster)) + " items.")
     filename = os.path.join(save_dir, "clusters.json")
     save_json(words, filename)
-    print("Done")
+
+
+
+if __name__ == '__main__':
+    num_clusters = 30
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+#######################################
+# Data preprocessing
+#######################################
+    sentences = prepare_data()
+    sentence_count = len(sentences)
+    print("Number of sentences: " + str(sentence_count))
+    token_count = sum([len(sentence) for sentence in sentences])
+    print("The corpus contains " + str(token_count) + " tokens")
+
+#######################################
+# Latent Dirichlet Analysis
+#######################################
+    print("Performing LDA analysis")
+    LDA(sentences)
+
+#######################################
+# word2vec
+#######################################
+    print("Instantiating word2vec model")
+    word2vec = get_word2vec(sentences)
+    vocab = word_vectors.wv.vocab
+    vocab_len = len(vocab)
+    print("word2vec vocab contains " + str(vocab_len) + " items.")
+    dim0 = word2vec.wv[vocab[0]].shape[0]
+    print("word2vec items have " + str(dim0) + " features.")
+    test_word2vec(word2vec)
+
+
+
+
+#######################################
+# k-means clustering
+#######################################
+    print("Clustering (k=" + str(num_clusters)+")")
+    k_means_cluster(word2vec, num_clusters)
 

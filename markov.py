@@ -3,27 +3,29 @@ import json
 import os
 
 markov_model = None
-save_dir = "markov/"
+save_dir = "markov"
 
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
-if os.path.exists(save_dir + "markov.json"):
+input_file = "data/data.json"
+model_save_path = os.path.join(save_dir, "markov.json")
+if os.path.exists(model_save_path):
     print("Loading pre-saved model")
-    with open(save_dir + "markov.json", "r") as f:
+    with open(model_save_path, "r") as f:
         model_json = json.load(f)
         markov_model = markovify.Text.from_json(model_json)
 else:
     print("Creating model from data")
     print("Loading text")
-    with open("data/data.json", "r") as f:
+    with open(input_file, "r") as f:
         json_data = json.load(f)
         text = json_data
         print("Building model")
         markov_model = markovify.Text(text)
         print("Saving pre-trained model")
         model_json = markov_model.to_json()
-        with open(save_dir + "markov.json", "w") as f:
+        with open(model_save_path, "w") as f:
             json.dump(model_json, f, indent=4)
 
 if markov_model is not None:
