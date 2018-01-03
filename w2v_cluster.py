@@ -1,3 +1,4 @@
+from six.moves import cPickle
 from gensim import corpora, models, similarities 
 import gensim.models.word2vec as w2v
 from sklearn.cluster import KMeans
@@ -5,8 +6,10 @@ from sklearn.manifold import TSNE
 from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import sent_tokenize, word_tokenize
 from text_handler import split_line_into_words
+from collections import Counter
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 import re
 import logging
 import multiprocessing
@@ -17,10 +20,22 @@ import sys
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 save_dir = "w2v_cluster"
+num_similar = 40
 
 def print_progress():
     sys.stdout.write("#")
     sys.stdout.flush()
+
+def save_bin(item, filename):
+    with open(filename, "wb") as f:
+        cPickle.dump(item, f)
+
+def load_bin(filename):
+    ret = None
+    if os.path.exists(filename):
+        with open(filename, "rb") as f:
+            ret = cPickle.load(f)
+    return ret
 
 def save_json(variable, filename):
     with open(filename, "w") as f:
@@ -80,26 +95,22 @@ def tokenize_sentences(sentences):
     ret = []
     max_s = len(sentences)
     prog_at = max_s / 50
-    count = 0
-    for s in sentences:
+    for count, s in enumerate(sentences):
         if len(s) > 0:
             tokens, lost = split_line_into_words(s)
             if len(tokens) > 0:
                 ret.append(tokens)
         if count % prog_at == 0:
             print_progress()
-        count += 1
     return ret
 
 def clean_sentences(tokens, stopwords, stemmer):
     ret = []
     max_s = len(tokens)
     prog_at = max_s / 50
-    count = 0
-    for sentence in tokens:
+    for count, sentence in enumerate(tokens):
         if count % prog_at == 0:
             print_progress()
-        count += 1
         cleaned = []
         for token in sentence:
             if len(token) > 0:
@@ -119,10 +130,11 @@ def clean_sentences(tokens, stopwords, stemmer):
                             skip = True
                             token = None
                     if skip == False:
-                        stem = stemmer.stem(token)
-                        if stem is not None:
-                            #print("Stemmed " + token + " to " + stem)
-                            token = stem
+                        if stemmer is not None:
+                            stem = stemmer.stem(token)
+                            if stem is not None:
+                                #print("Stemmed " + token + " to " + stem)
+                                token = stem
                     if skip == False:
                         if token is not None:
                             cleaned.append(token)
@@ -139,34 +151,36 @@ def load_raw_data(input_files):
     return ret
 
 def prepare_data():
+    print("Loading and tokenizing raw data")
+    tokens_file = os.path.join(save_dir, "tokens.json")
+    tokens = load_json(tokens_file)
+    if tokens is None:
+        input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
+        print("Loading raw data")
+        raw_data = load_raw_data(input_files)
+
+        print("Splitting data into sentences")
+        raw_sentences = split_into_sentences(raw_data)
+        print("Tokenizing sentences")
+        tokens = tokenize_sentences(raw_sentences)
+        save_json(tokens, tokens_file)
+
+    sentence_count = len(tokens)
+    print("[TOKENS] Number of sentences: " + str(sentence_count))
+    token_count = sum([len(sentence) for sentence in tokens])
+    print("[TOKENS] The corpus contains " + str(token_count) + " tokens")
+
+    print("Cleaning and stemming tokens")
     cleaned_file = os.path.join(save_dir, "cleaned.json")
     cleaned = load_json(cleaned_file)
     if cleaned is None:
-        tokens_file = os.path.join(save_dir, "tokens.json")
-        tokens = load_json(tokens_file)
-        if tokens is None:
-            input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
-            print("Loading raw data")
-            raw_data = load_raw_data(input_files)
-
-            print("Splitting data into sentences")
-            raw_sentences = split_into_sentences(raw_data)
-            print("Tokenizing sentences")
-            tokens = tokenize_sentences(raw_sentences)
-            save_json(tokens, tokens_file)
-
-        sentence_count = len(tokens)
-        print("Number of sentences: " + str(sentence_count))
-        token_count = sum([len(sentence) for sentence in tokens])
-        print("The corpus contains " + str(token_count) + " tokens")
-        print("Cleaning and stemming data")
-
         stopwords_file = "data/stopwords-iso.json"
         stopwords = load_json(stopwords_file)
         stopwords_en = None
         if stopwords is not None:
             stopwords_en = stopwords["en"]
-        stemmer = SnowballStemmer("english")
+        stemmer = None
+        #stemmer = SnowballStemmer("english")
         cleaned1 = clean_sentences(tokens, stopwords_en, stemmer)
         cleaned = []
         for sent in cleaned1:
@@ -175,15 +189,28 @@ def prepare_data():
             else:
                 print("Found empty sentence. WTF??!?!?!")
         save_json(cleaned, cleaned_file)
-    return cleaned
+    sentence_count = len(cleaned)
+    print("[CLEANED] Number of sentences: " + str(sentence_count))
+    token_count = sum([len(sentence) for sentence in cleaned])
+    print("[CLEANED] The corpus contains " + str(token_count) + " tokens")
 
+    return tokens, cleaned
 
+def get_word_frequencies(corpus):
+    print("Calculating word frequencies.")
+    frequencies = Counter()
+    for sent in corpus:
+        for word in sent:
+            frequencies[word] += 1
+    freq = frequencies.most_common()
+    return freq
 
 
 def get_word2vec(sentences):
     num_workers = multiprocessing.cpu_count()
     num_features = 500
     epoch_count = 100
+    sentence_count = len(sentences)
     w2v_file = os.path.join(save_dir, "word_vectors.w2v")
     word2vec = None
     if os.path.exists(w2v_file):
@@ -208,17 +235,15 @@ def get_word2vec(sentences):
     return word2vec
 
 def most_similar(input_word, word2vec):
-    input_word = input_word.lower
-    if input_word not in word2vec.wv.vocab:
-        print(input_word + " was not in the vocabulary.")
-        return
-    sim = word2vec.wv.most_similar(input_word)
+    sim = word2vec.wv.most_similar(input_word, topn=num_similar)
+    output = []
     found = []
     for item in sim:
         w, n = item
         found.append(w)
-    print(input_word + ": " + ", ".join(found))
-    t_sne_scatterplot(word2vec, input_word)
+    output = [input_word, found]
+    t_sne_scatterplot(input_word, word2vec)
+    return output
 
 def nearest_similarity_cosmul(start1, end1, end2, word2vec):
     similarities = word2vec.wv.most_similar_cosmul(
@@ -229,21 +254,83 @@ def nearest_similarity_cosmul(start1, end1, end2, word2vec):
     print("{start1} is related to {end1}, as {start2} is related to {end2}".format(**locals()))
     return start2
 
-def t_sne_scatterplot(word2vec, word):
-    vocab = word_vectors.wv.vocab
+def plot_all(word2vec, clusters):
+    vocab = word2vec.wv.vocab.keys()
     vocab_len = len(vocab)
-    print("word2vec vocab contains " + str(vocab_len) + " items.")
-    dim0 = word2vec.wv[vocab[0]].shape[0]
-    print("word2vec items have " + str(dim0) + " features.")
+    prog = vocab_len/50
+    labels = []
+    xkcd_colors = load_json("xkcd_color_names.json")
+    arr = np.empty((0, dim0), dtype='f')
+    labels = []
+    vectors_file = os.path.join(save_dir, "vocab_vectors.npy")
+    labels_file = os.path.join(save_dir, "labels.json")
+    if os.path.exists(vectors_file) and os.path.exists(labels_file):
+        print("Loading pre-saved vectors from disk")
+        arr = load_bin(vectors_file)
+        labels = load_json(labels_file)
+    else:
+        print("Creating an array of vectors for each word in the vocab")
+        count = 0
+        for cluster in clusters:
+            for word in cluster:
+                if count % prog == 0:
+                    print_progress()
+                w_vec = word2vec[word]
+                labels.append(word)
+                arr = np.append(arr, np.array([w_vec]), axis=0)
+                count += 1
+        save_bin(arr, vectors_file)
+        save_json(labels, labels_file)
+    x_c_filename = os.path.join(save_dir, "x_coords.npy")
+    y_c_filename = os.path.join(save_dir, "y_coords.npy")
+    x_coords = None
+    y_coords = None
+    if os.path.exists(x_c_filename) and os.path.exists(y_c_filename):
+        print("Reading pre-calculated coords from disk")
+        x_coords = load_bin(x_c_filename)
+        y_coords = load_bin(y_c_filename)
+    else:
+        print("Computing T-SNE for array of length: " + str(len(arr)))
+        tsne = TSNE(n_components=2, random_state=1, verbose=1)
+        np.set_printoptions(suppress=True)
+        Y = tsne.fit_transform(arr)
+        x_coords = Y[:, 0]
+        y_coords = Y[:, 1]
+        print("Saving calculated coords")
+        save_bin(x_coords, x_c_filename)
+        save_bin(y_coords, y_c_filename)
+    index = 0
+    for count, cluster in enumerate(clusters):
+        clen = len(cluster)
+        if clen > 0:
+            color = xkcd_colors[random.randint(0, len(xkcd_colors)-1)]
+            print("Cluster: " + str(count) + " items: " + str(clen) + " color: " + color)
+            xc = x_coords[index:index+clen]
+            yc = y_coords[index:index+clen]
+            plt.scatter(xc, yc, marker=".", c=color)
+        else:
+            print("Empty cluster")
+            print cluster
+        index += clen
 
-    word = word.lower()
-    if word not in vocab:
-        print("Queried word was not in vocab")
-        return
+    plt.xlim(x_coords.min()+0.005, x_coords.max()+0.005)
+    plt.ylim(y_coords.min()+0.005, y_coords.max()+0.005)
+    plot_dir = os.path.join(save_dir, "plots")
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+    filename = os.path.join(save_dir, "all_vectors_tsne.png")
+    plt.savefig(filename)
+    plt.close()
+
+
+def t_sne_scatterplot(word, word2vec):
+    vocab = word2vec.wv.vocab.keys()
+    vocab_len = len(vocab)
+    dim0 = word2vec.wv[vocab[0]].shape[0]
 
     arr = np.empty((0, dim0), dtype='f')
     w_labels = [word]
-    nearby = word2vec.similar_by_word(word)
+    nearby = word2vec.wv.similar_by_word(word, topn=num_similar)
     arr = np.append(arr, np.array([word2vec[word]]), axis=0)
     for score in nearby:
         w_vec = word2vec[score[0]]
@@ -256,71 +343,88 @@ def t_sne_scatterplot(word2vec, word):
 
     x_coords = Y[:, 0]
     y_coords = Y[:, 1]
-    plt.scatter(x_coords, y_coords)
-
+    plt.scatter(x_coords, y_coords, marker=".")
 
     for label, x, y in zip(w_labels, x_coords, y_coords):
         plt.annotate(label, xy=(x, y), xytext=(0, 0), textcoords='offset points')
-    plt.xlim(x_coords.min()+0.00005, x_coords.max()+0.00005)
-    plt.ylim(y_coords.min()+0.00005, y_coords.max()+0.00005)
-    filename = os.path.join(save_dir, word + "_tsne.png")
+    plt.xlim(x_coords.min()+0.0005, x_coords.max()+0.0005)
+    plt.ylim(y_coords.min()+0.0005, y_coords.max()+0.0005)
+    plot_dir = os.path.join(save_dir, "plots")
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+    filename = os.path.join(plot_dir, word + "_tsne.png")
     plt.savefig(filename)
+    plt.close()
 
 def test_word2vec(word2vec):
-    print
-    most_similar("Mage", word2vec)
-    most_similar("Elf", word2vec)
-    most_similar("Void", word2vec)
-    print
-    most_similar("PVP", word2vec)
-    most_similar("gank", word2vec)
-    print
-    most_similar("PVE", word2vec)
-    most_similar("Raid", word2vec)
-    most_similar("raiding", word2vec)
-    most_similar("Nighthold", word2vec)
-    most_similar("Varimathras", word2vec)
-    print
-    most_similar("Alliance", word2vec)
-    most_similar("Horde", word2vec)
-    most_similar("evil", word2vec)
-    most_similar("good", word2vec)
-    print
+    test_words = ["mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "good", "reroll", "quit", "lol"]
+    vocab = word2vec.wv.vocab.keys()
+    vocab_len = len(vocab)
+    output = []
+    print("Testing known words")
+    for word in test_words:
+        if word in vocab:
+            output.append(most_similar(word, word2vec))
+    print("Testing random words")
+    for _ in range(10):
+        word = vocab[random.randint(0, vocab_len-1)]
+        output.append(most_similar(word, word2vec))
+    filename = os.path.join(save_dir, "word2vec_test.json")
+    save_json(output, filename)
 
-
-def LDA(tokens):
-    sentences = tokens
-    print("Creating dictionary")
-    dictionary = corpora.Dictionary(sentences)
-
+def LDA(cleaned):
     model_save_name = os.path.join(save_dir, "lda_model.sav")
     lda = None
     if os.path.exists(model_save_name):
         print("Loading model from disk")
         lda = models.LdaModel.load(model_save_name)
     else:
+        tokens = []
+        print("Creating dictionary")
+        dictionary = corpora.Dictionary(cleaned)
+
+        full_dict_items = dictionary.items()
+        filename = os.path.join(save_dir, "LDA_full_dictionary.json")
+        save_json(full_dict_items, filename)
+        full_vocab = []
+        for item in full_dict_items:
+            full_vocab.append(item[1])
+        print("Full vocab contained " + str(len(full_vocab)) + " items.")
+        filename = os.path.join(save_dir, "LDA_full_vocab.json")
+        save_json(full_vocab, filename)
         print("Creating corpus")
-        corpus = [dictionary.doc2bow(sentences)]
+        count = 0
+        max_i = len(cleaned)
+        prog = max_i/50
+        for sent in cleaned:
+            tokens += sent
+        corpus = [dictionary.doc2bow(tokens, return_missing=False)]
         print("Building model")
-        lda = models.LdaModel(corpus, num_topics=50, 
-                              id2word=dictionary, 
-                              update_every=5, 
+        lda = models.LdaModel(corpus,
+                              num_topics=10,
+                              id2word=dictionary,
+                              distributed=False,
+                              chunksize=2000,
+                              passes=10,
+                              update_every=1,
+                              alpha='symmetric',
+                              eta=None,
+                              decay=0.5,
+                              offset=1.0,
+                              eval_every=None,
+                              iterations=50,
+                              gamma_threshold=0.001,
+                              minimum_probability=0.01,
                               random_state=1,
-                              chunksize=10000, 
-                              passes=100)
+                              ns_conf=None,
+                              minimum_phi_value=0.01,
+                              per_word_topics=True,
+                              callbacks=None)
         lda.save(model_save_name)
 
-    topics_matrix = lda.show_topics(formatted=False, num_words=20)
+    topics_matrix = lda.show_topics(formatted=True, num_words=5)
     topics_save_name = os.path.join(save_dir, "topics_matrix.json")
     with open(topics_save_name, "w") as f:
-        json.dump(topics_matrix, f, indent=4)
-    sentence_map = {}
-    for s in sentences:
-        chunk = dictionary.doc2bow(s)
-        print chunk
-        sentence_map[s] = lda.get_document_topics(chunk)
-    sentence_map_save = save_dir + "sentence_map.json"
-    with open(sentence_map_save, "w") as f:
         json.dump(topics_matrix, f, indent=4)
 
 
@@ -351,6 +455,7 @@ def k_means_cluster(word2vec, num_clusters):
         print("\nCluster " + str(cl) + " had " + str(len(cluster)) + " items.")
     filename = os.path.join(save_dir, "clusters.json")
     save_json(words, filename)
+    return words
 
 
 
@@ -362,36 +467,47 @@ if __name__ == '__main__':
 #######################################
 # Data preprocessing
 #######################################
-    sentences = prepare_data()
-    sentence_count = len(sentences)
-    print("Number of sentences: " + str(sentence_count))
-    token_count = sum([len(sentence) for sentence in sentences])
-    print("The corpus contains " + str(token_count) + " tokens")
+    full, cleaned = prepare_data()
+    filename = os.path.join(save_dir, "cleaned_frequencies.json")
+    cleaned_frequencies = get_word_frequencies(cleaned)
+    save_json(cleaned_frequencies, filename)
 
 #######################################
 # Latent Dirichlet Analysis
 #######################################
-    print("Performing LDA analysis")
-    LDA(sentences)
+# LDA doesn't fucking work for shit
+# Always returns n "topics" containing a set of the 6 most frequent words in the corpus
+# If I had wanted that, I'd have fucking coded it in 3 lines myself
+# Fucking bullshit
+    #print
+    #print("Performing LDA analysis")
+    #LDA(cleaned)
 
 #######################################
 # word2vec
 #######################################
+    print
     print("Instantiating word2vec model")
-    word2vec = get_word2vec(sentences)
-    vocab = word_vectors.wv.vocab
+    word2vec = get_word2vec(cleaned)
+    vocab = word2vec.wv.vocab.keys()
     vocab_len = len(vocab)
     print("word2vec vocab contains " + str(vocab_len) + " items.")
     dim0 = word2vec.wv[vocab[0]].shape[0]
     print("word2vec items have " + str(dim0) + " features.")
-    test_word2vec(word2vec)
-
-
-
+    print("Running tests")
+    #test_word2vec(word2vec)
+    filename = os.path.join(save_dir, "clusters.json")
+    clusters = load_json(filename)
+    print("Plotting full graph")
+    plot_all(word2vec, clusters)
+    sys.exit(0)
 
 #######################################
 # k-means clustering
 #######################################
+    print
     print("Clustering (k=" + str(num_clusters)+")")
-    k_means_cluster(word2vec, num_clusters)
+    clusters = k_means_cluster(word2vec, num_clusters)
 
+    print
+    print("Done")
