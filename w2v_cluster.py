@@ -290,8 +290,8 @@ def get_word_frequencies(corpus):
 
 def get_word2vec(sentences):
     num_workers = multiprocessing.cpu_count()
-    num_features = 500
-    epoch_count = 100
+    num_features = 300
+    epoch_count = 1000
     sentence_count = len(sentences)
     w2v_file = os.path.join(save_dir, "word_vectors.w2v")
     word2vec = None
@@ -305,7 +305,7 @@ def get_word2vec(sentences):
                                 size=num_features,
                                 min_count=3,
                                 window=7,
-                                sample=0.0001)
+                                sample=0)
 
         print("Building vocab...")
         word2vec.build_vocab(sentences)
@@ -337,7 +337,7 @@ def nearest_similarity_cosmul(start1, end1, end2, word2vec):
     return start2
 
 def test_word2vec(word2vec):
-    test_words = ["mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol"]
+    test_words = ["illidan", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
     vocab = word2vec.wv.vocab.keys()
     vocab_len = len(vocab)
     output = []
@@ -372,16 +372,22 @@ def show_cluster_locations(results, labels, x_coords, y_coords):
         in_set_y = []
         out_set_x = []
         out_set_y = []
+        name_x = 0
+        name_y = 0
         for count, word in enumerate(labels):
             xc = x_coords[count]
             yc = y_coords[count]
-            if word in similar:
+            if word == name:
+                name_x = xc
+                name_y = yc
+            elif word in similar:
                 in_set_x.append(xc)
                 in_set_y.append(yc)
             else:
                 out_set_x.append(xc)
                 out_set_y.append(yc)
         plt.figure(figsize=(16, 12), dpi=80)
+        plt.scatter(name_x, name_y, s=400, marker="o", c="blue")
         plt.scatter(in_set_x, in_set_y, s=80, marker="o", c="red")
         plt.scatter(out_set_x, out_set_y, s=8, marker=".", c="black")
         plt.savefig(filename)
