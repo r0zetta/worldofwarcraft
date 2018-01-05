@@ -1,4 +1,6 @@
 from six.moves import cPickle
+from tensorflow.contrib.tensorboard.plugins import projector
+import tensorflow as tf
 from gensim import corpora, models, similarities 
 import gensim.models.word2vec as w2v
 from sklearn.cluster import KMeans
@@ -17,6 +19,13 @@ import os
 import nltk
 import json
 import sys
+
+#plot_lims = ["xmin":-15, "xmax":15, "ymin":15, "ymax":15]
+#test_words = ["trump", "bannon", "war", "nuclear", "iran", "america", "russia", "korea", "impeach", "hillary", "god", "fbi"]
+
+input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
+test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"], ["warrior", "mage", "priest"]]
+test_words = ["illidan", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 save_dir = "w2v_cluster"
@@ -155,7 +164,6 @@ def prepare_data():
     tokens_file = os.path.join(save_dir, "tokens.json")
     tokens = load_json(tokens_file)
     if tokens is None:
-        input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
         print("Loading raw data")
         raw_data = load_raw_data(input_files)
 
@@ -316,6 +324,43 @@ def get_word2vec(sentences):
         word2vec.save(w2v_file)
     return word2vec
 
+def create_embeddings(word2vec):
+    print("Creating embeddings for tensorboard")
+    all_word_vectors_matrix = word2vec.wv.syn0
+    num_words = len(all_word_vectors_matrix)
+    vocab = word2vec.wv.vocab.keys()
+    vocab_len = len(vocab)
+    dim = word2vec.wv[vocab[0]].shape[0]
+    embedding = np.empty((num_words, dim), dtype=np.float32)
+    metadata = ""
+    for i, word in enumerate(vocab):
+        embedding[i] = word2vec.wv[word]
+        metadata += word + "\n"
+    metadata_file = os.path.join(save_dir, "metadata.tsv")
+    with open(metadata_file, "w") as f:
+        f.write(metadata)
+
+    tf.reset_default_graph()
+    sess = tf.InteractiveSession()
+    X = tf.Variable([0.0], name='embedding')
+    place = tf.placeholder(tf.float32, shape=embedding.shape)
+    set_x = tf.assign(X, place, validate_shape=False)
+    sess.run(tf.global_variables_initializer())
+    sess.run(set_x, feed_dict={place: embedding})
+
+    summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
+    config = projector.ProjectorConfig()
+    embedding_conf = config.embeddings.add()
+    embedding_conf.tensor_name = 'embedding:0'
+    embedding_conf.metadata_path = 'metadata.tsv'
+    projector.visualize_embeddings(summary_writer, config)
+
+    save_file = os.path.join(save_dir, "model.ckpt")
+    print("Saving session...")
+    saver = tf.train.Saver()
+    saver.save(sess, save_file)
+
+
 def most_similar_intersection(inputs, word2vec):
     output = []
     similar = {}
@@ -365,38 +410,41 @@ def nearest_similarity_cosmul(start1, end1, end2, word2vec):
     return start2
 
 def test_word2vec(word2vec):
-    test_words = ["illidan", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
     vocab = word2vec.wv.vocab.keys()
     vocab_len = len(vocab)
     output = []
-    print("Testing known words")
-    for count, word in enumerate(test_words):
-        if word in vocab:
-            print("[" + str(count+1) + "] Testing: " + word)
-            output.append(most_similar(word, word2vec))
-        else:
-            print("Word " + word + " not in vocab")
-    """
-    print("Testing random words")
-    for _ in range(10):
-        word = vocab[random.randint(0, vocab_len-1)]
-        print("Testing " + word)
-        output.append([word, most_similar(word, word2vec)])
-    """
-    filename = os.path.join(save_dir, "word2vec_test.json")
-    save_json(output, filename)
+    test_items = []
+    if 'test_words' in globals():
+        print("Testing known words")
+        test_items = test_words
+    else:
+        print("Using frequent words as test items")
+        freq_file = os.path.join(save_dir, "cleaned_frequencies.json")
+        frequencies = load_json(freq_file)
+        if frequencies is not None:
+            for item in frequencies[:50]:
+                test_items.append(item[0])
+    if len(test_items) > 0:
+        for count, word in enumerate(test_items):
+            if word in vocab:
+                print("[" + str(count+1) + "] Testing: " + word)
+                output.append(most_similar(word, word2vec))
+            else:
+                print("Word " + word + " not in vocab")
+        filename = os.path.join(save_dir, "word2vec_test.json")
+        save_json(output, filename)
     return output
 
 def test_intersections(word2vec):
-    test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"], ["warrior", "mage", "priest"]]
     output = []
-    for count, group in enumerate(test_groups):
-        print("[" + str(count+1) + "] Testing intersection: " + str(group))
-        retval = most_similar_intersection(group, word2vec)
-        if retval is not None:
-            output.append(retval)
-    filename = os.path.join(save_dir, "word2vec_test_groups.json")
-    save_json(output, filename)
+    if 'test_groups' in globals():
+        for count, group in enumerate(test_groups):
+            print("[" + str(count+1) + "] Testing intersection: " + str(group))
+            retval = most_similar_intersection(group, word2vec)
+            if retval is not None:
+                output.append(retval)
+        filename = os.path.join(save_dir, "word2vec_test_groups.json")
+        save_json(output, filename)
     return output
 
 def show_cluster_locations(results, labels, x_coords, y_coords):
@@ -430,6 +478,9 @@ def show_cluster_locations(results, labels, x_coords, y_coords):
         plt.scatter(name_x, name_y, s=400, marker="o", c="blue")
         plt.scatter(in_set_x, in_set_y, s=80, marker="o", c="red")
         plt.scatter(out_set_x, out_set_y, s=8, marker=".", c="black")
+        if 'plot_lims' in globals():
+            plt.xlim(plot_lims["xmin"], plot_lims["xmax"])
+            plt.ylim(plot_lims["ymin"], plot_lims["ymax"])
         plt.savefig(filename)
         plt.close()
 
@@ -494,6 +545,9 @@ def plot_all(word2vec, clusters):
             print cluster
         index += clen
 
+    if 'plot_lims' in globals():
+        plt.xlim(plot_lims["xmin"], plot_lims["xmax"])
+        plt.ylim(plot_lims["ymin"], plot_lims["ymax"])
     plot_dir = os.path.join(save_dir, "plots")
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
@@ -577,6 +631,7 @@ if __name__ == '__main__':
     print("word2vec vocab contains " + str(vocab_len) + " items.")
     dim0 = word2vec.wv[vocab[0]].shape[0]
     print("word2vec items have " + str(dim0) + " features.")
+    create_embeddings(word2vec)
 
     print("Running intersection tests")
     intersections = test_intersections(word2vec)
