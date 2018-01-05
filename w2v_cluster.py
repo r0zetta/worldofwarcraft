@@ -20,9 +20,9 @@ import nltk
 import json
 import sys
 
-#plot_lims = ["xmin":-15, "xmax":15, "ymin":15, "ymax":15]
-#test_words = ["trump", "bannon", "war", "nuclear", "iran", "america", "russia", "korea", "impeach", "hillary", "god", "fbi"]
+#plot_lims = {"xmin":-15, "xmax":15, "ymin":15, "ymax":15}
 
+lang = "en"
 input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
 test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"], ["warrior", "mage", "priest"]]
 test_words = ["illidan", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
@@ -184,12 +184,12 @@ def prepare_data():
     if cleaned is None:
         stopwords_file = "data/stopwords-iso.json"
         stopwords = load_json(stopwords_file)
-        stopwords_en = None
+        stopwords_lang = None
         if stopwords is not None:
-            stopwords_en = stopwords["en"]
+            stopwords_lang = stopwords[lang]
         stemmer = None
         #stemmer = SnowballStemmer("english")
-        cleaned1 = clean_sentences(tokens, stopwords_en, stemmer)
+        cleaned1 = clean_sentences(tokens, stopwords_lang, stemmer)
         cleaned = []
         for sent in cleaned1:
             if len(sent) > 0:
