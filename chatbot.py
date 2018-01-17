@@ -143,9 +143,14 @@ def sample(args, context, sess):
     new_seed = seed
     filename = os.path.join(save_dir, "sample_out.txt")
     handle = open(filename, "a")
+    users = ["n00bk1ller", "ganksquad1"]
+    current_user = 0
     while True:
-        print
+        sys.stdout.write(users[current_user] + "> ")
+        sys.stdout.flush()
         type_sentence(new_seed)
+        print
+        print
         handle.write(new_seed + "\n\n")
         sanitized = sanitize_line(new_seed)
         tokens = tokenize(sanitized, args["tokenize"])
@@ -173,12 +178,23 @@ def sample(args, context, sess):
                 sentence = sentence + [w]
             sentence = "".join(sentence)
             new_seed = sentence
+            if current_user == 0:
+                current_user = 1
+            else:
+                current_user = 0
 
 def type_sentence(sentence):
     for c in list(sentence):
         sys.stdout.write(c)
         sys.stdout.flush()
-        time.sleep(float(random.randint(20,200)/1000.0))
+        if c == " ":
+            time.sleep(float(random.randint(100,230)/1000.0))
+        elif c in ".,!?/-+_":
+            time.sleep(float(random.randint(130,350)/1000.0))
+        elif c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            time.sleep(float(random.randint(60,180)/1000.0))
+        else:
+            time.sleep(float(random.randint(20,150)/1000.0))
 
 def get_saved_args():
     saved = None
