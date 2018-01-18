@@ -140,21 +140,40 @@ def get_threads(url_list, count):
     return threads, post_count_total
 
 def organize_conversation(posts):
+    global interactions
     conv = []
     first_post = posts[0]["post_content"]
     first_post_id = posts[0]["post_id"]
+    first_post_author = posts[0]["author_name"]
     replied_ids = {}
+    replied_authors = {}
     posts_map = {}
     replied_ids[first_post_id] = []
+    post_id_to_author = {}
     for p in posts:
         if "replied_to" in p:
             replied_ids[p["replied_to"]] = []
         posts_map[p["post_id"]] = p["post_content"]
+        post_id_to_author[p["post_id"]] = p["author_name"]
     for p in posts:
+        post_author = p["author_name"]
+        replied_post_id = ""
         if "replied_to" in p:
             replied_ids[p["replied_to"]].append(p["post_id"])
+            replied_post_id = p["replied_to"]
         else:
             replied_ids[first_post_id].append(p["post_id"])
+            replied_post_id = first_post_id
+        replied_to_author = ""
+        if replied_post_id in post_id_to_author:
+            replied_to_author = post_id_to_author[replied_post_id]
+        elif first_post_id in post_id_to_author:
+            replied_to_author = first_post_id
+        if len(replied_to_author) > 0:
+            if post_author not in interactions:
+                interactions[post_author] = []
+            if replied_to_author not in interactions[post_author]:
+                interactions[post_author].append(replied_to_author)
     for key, values in replied_ids.iteritems():
         if key in posts_map:
             question = posts_map[key]
@@ -217,6 +236,7 @@ if __name__ == '__main__':
     if not os.path.exists(save_dir):
         print("Creating save dir")
         os.makedirs(save_dir)
+    interactions = {}
     threads, post_count = get_threads(start_urls, num_pages_to_visit)
     thread_total = len(threads)
     print("Enumerated a total of: " + str(thread_total) + " threads, with " + str(post_count) + " posts.")
@@ -250,6 +270,7 @@ if __name__ == '__main__':
             authors = get_authors(all_posts)
             all_threads_item["authors"] = authors
             all_threads.append(all_threads_item)
+            dump_data(interactions, "interactions.json")
             dump_data(authors, "authors.json")
             dump_data(all_conversations, "conv.json")
             dump_data(just_text, "data.json")
