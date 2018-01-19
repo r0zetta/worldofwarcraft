@@ -224,7 +224,7 @@ def organize_conversation(posts):
             for v in values:
                 if v in posts_map:
                     answer = posts_map[v]
-                    if question != answer:
+                    if question != answer and question != "" and answer != "":
                         qa = [question, answer]
                         conv.append(qa)
     return conv
