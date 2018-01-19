@@ -128,12 +128,14 @@ def recurse_comments(outer_comment, parent_metadata, post_data, posts_collected)
             post["author_name"] = "guest"
         #print("Author name: " + post["author_name"])
         if parent_metadata is not None:
+            if "post_id" in parent_metadata:
+                post["replied_to"] = parent_metadata["post_id"]
             if "author_name" in parent_metadata:
-                post["replied_to"] = parent_metadata["author_name"]
+                replied_to = parent_metadata["author_name"]
                 if post["author_name"] not in interactions:
                     interactions[post["author_name"]] = []
-                if post["replied_to"] not in interactions[post["author_name"]]:
-                    interactions[post["author_name"]].append(post["replied_to"])
+                if replied_to not in interactions[post["author_name"]]:
+                    interactions[post["author_name"]].append(replied_to)
 
         text_area = outer_comment.find("div", class_="usertext-body")
         if text_area is not None:
