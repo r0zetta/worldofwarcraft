@@ -10,7 +10,7 @@ import time
 save_dir = "reddit_data"
 #start_urls = ["https://www.reddit.com/r/wow/"]
 start_urls = ["https://www.reddit.com/r/The_Donald/"]
-num_pages_to_visit = 2
+num_pages_to_visit = 5
 visited_urls = []
 
 def dump_gephi_file():
@@ -164,7 +164,6 @@ def process_forum_topic(url):
     post_data = []
     posts_collected = []
     for x, c in enumerate(outer_comments):
-        #print("Outer comment: " + str(x))
         new_data = recurse_comments(c, None, post_data, posts_collected)
         for d in new_data:
             if d not in ret:
