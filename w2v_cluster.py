@@ -25,7 +25,7 @@ import sys
 lang = "en"
 input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
 test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"], ["warrior", "mage", "priest"]]
-test_words = ["illidan", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
+test_words = ["illidan", "velen", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "monk", "paladin", "druid", "warlock", "rogue", "dk", "dh", "shaman", "human", "tauren", "belf", "undead", "forsaken", "dranei", "troll", "orc", "dwarf", "gnome", "worgen", "pandaren", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 save_dir = "w2v_cluster"
@@ -413,6 +413,7 @@ def test_word2vec(word2vec):
     vocab = word2vec.wv.vocab.keys()
     vocab_len = len(vocab)
     output = []
+    associations = {}
     test_items = []
     if 'test_words' in globals():
         print("Testing known words")
@@ -428,11 +429,25 @@ def test_word2vec(word2vec):
         for count, word in enumerate(test_items):
             if word in vocab:
                 print("[" + str(count+1) + "] Testing: " + word)
-                output.append(most_similar(word, word2vec))
+                similar = most_similar(word, word2vec)
+                if word not in associations:
+                    associations[word] = []
+                for s in similar[1]:
+                    if s not in associations[word]:
+                        associations[word].append(s)
+                output.append(similar)
             else:
                 print("Word " + word + " not in vocab")
         filename = os.path.join(save_dir, "word2vec_test.json")
         save_json(output, filename)
+    filename = os.path.join(save_dir, "associations.json")
+    save_json(associations, filename)
+    filename = os.path.join(save_dir, "associations.csv")
+    handle = open(filename, "w")
+    handle.write("Source,Target\n")
+    for w, sim in associations.iteritems():
+        for s in sim:
+            handle.write(w + "," + s + "\n")
     return output
 
 def test_intersections(word2vec):
