@@ -389,8 +389,8 @@ def most_similar_intersection(inputs, word2vec):
     else:
         return None
 
-def most_similar(input_word, word2vec):
-    sim = word2vec.wv.most_similar(input_word, topn=num_similar)
+def most_similar(input_word, word2vec, num):
+    sim = word2vec.wv.most_similar(input_word, topn=num)
     output = []
     found = []
     for item in sim:
@@ -415,6 +415,7 @@ def test_word2vec(word2vec):
     output = []
     associations = {}
     test_items = []
+    checked_words = []
     if 'test_words' in globals():
         print("Testing known words")
         test_items = test_words
@@ -429,12 +430,22 @@ def test_word2vec(word2vec):
         for count, word in enumerate(test_items):
             if word in vocab:
                 print("[" + str(count+1) + "] Testing: " + word)
-                similar = most_similar(word, word2vec)
+                similar = most_similar(word, word2vec, num_similar)
+                checked_words.append(word)
                 if word not in associations:
                     associations[word] = []
                 for s in similar[1]:
                     if s not in associations[word]:
                         associations[word].append(s)
+                    if s not in checked_words:
+                        print("\tChecking: " + s)
+                        sim2 = most_similar(s, word2vec, 10)
+                        checked_words.append(s)
+                        if s not in associations:
+                            associations[s] = []
+                        for s2 in sim2[1]:
+                            if s2 not in associations[s]:
+                                associations[s].append(s2)
                 output.append(similar)
             else:
                 print("Word " + word + " not in vocab")
