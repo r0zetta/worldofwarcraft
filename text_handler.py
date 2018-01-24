@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import string
 import collections
@@ -150,7 +151,8 @@ def process_word(word):
     if word.startswith("http"):
         return [""]
     word = word.replace(u'\u201c', u'"').replace(u'\u201d', u'"').replace(u'\u2018', u'\'').replace(u'\u2019', u'\'').replace(u'\u2013', u'-')
-    word = ''.join(x for x in word if x in string.printable)
+    valid = u"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ#@.?!:/&; äöåÄÖÅ"
+    word = ''.join(x for x in word if x in valid)
 
     if len(word) < 2:
         return [word]

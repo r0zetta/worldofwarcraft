@@ -27,6 +27,8 @@ input_files = ["battle_net_data/data.json", "mmo_champion_data/data.json"]
 test_groups = [["sylvanas", "horde"], ["nerf", "buff"], ["affliction", "nerf"], ["pvp", "gank"], ["alliance", "horde"], ["raid", "raiding"], ["anduin", "sylvanas"], ["warrior", "mage", "priest"]]
 test_words = ["illidan", "velen", "sylvanas", "anduin", "nerf", "buff", "warrior", "priest", "mage", "monk", "paladin", "druid", "warlock", "rogue", "dk", "dh", "shaman", "human", "tauren", "belf", "undead", "forsaken", "dranei", "troll", "orc", "dwarf", "gnome", "worgen", "pandaren", "elf", "void", "pvp", "gank", "raid", "raiding", "nighthold", "tomb", "antorus", "varimathras", "argus", "coven", "affliction", "lock", "shadow", "alliance", "horde", "evil", "nice", "reroll", "quit", "lol", "qq", "bench", "wtf", "broken", "noob", "hunter"]
 
+extra_stopwords = ["ett", "mys", "tnn", "hyv", "tm", "mit", "kyll", "tss", "siit", "pit", "viel", "sit", "n", "saa", "vuonna", "tll", "eik", "klo", "pitisi", "nin", "t", "tmn", "lsn", "eivt", "j", "miss", "pivn", "kertoo", "yhn", "mik", "tn", "tt", "sek", "lis", "mist", "tehd", "sai", "esim", "l", "thn", "mm", "nytt", "k", "ku", "s", "hn", "nit", "s", "no", "mitn", "m", "ky", "tst", "mut", "nm", "y", "lpi", "siin", "a", "in", "jlkeen", "ehk", "h", "ollaan", "e", "piv", "oy", "p", "yh", "sill", "min", "o", "va", "el", "tyn", "na", "the", "tit", "to", "iti", "tehdn", "tlt", "ois"]
+
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 save_dir = "w2v_cluster"
 num_similar = 40
@@ -47,19 +49,17 @@ def load_bin(filename):
     return ret
 
 def save_json(variable, filename):
-    with open(filename, "w") as f:
-        json.dump(variable, f, indent=4)
+    with io.open(filename, "w", encoding="utf-8") as f:
+        f.write(unicode(json.dumps(variable, indent=4, ensure_ascii=False)))
 
 def load_json(filename):
     ret = None
     if os.path.exists(filename):
         try:
-            with open(filename, "r") as f:
+            with io.open(filename, "r", encoding="utf-8") as f:
                 ret = json.load(f)
         except:
-            print("Couldn't load " + filename + ".")
-    else:
-        print(filename + " didn't exist.")
+            pass
     return ret
 
 def get_saved_args():
@@ -187,6 +187,7 @@ def prepare_data():
         stopwords_lang = None
         if stopwords is not None:
             stopwords_lang = stopwords[lang]
+            stopwords_lang += extra_stopwords
         stemmer = None
         #stemmer = SnowballStemmer("english")
         cleaned1 = clean_sentences(tokens, stopwords_lang, stemmer)
